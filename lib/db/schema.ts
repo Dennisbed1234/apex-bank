@@ -50,6 +50,7 @@ export const account = pgTable('account', {
   accessTokenExpiresIn: integer('accessTokenExpiresIn'),
   scope: text('scope'),
   password: text('password'),
+  issuer: text('issuer'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 })
