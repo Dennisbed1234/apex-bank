@@ -18,11 +18,12 @@ export function CtaFooter() {
             monthly fees — ever.
           </p>
           <Button
-            asChild
             size="lg"
             className="h-12 bg-sidebar-primary px-8 text-base text-sidebar-primary-foreground hover:bg-sidebar-primary/90"
+            nativeButton={false}
+            render={<Link href="/sign-up" />}
           >
-            <Link href="/sign-up">Get started</Link>
+            Get started
           </Button>
         </div>
       </section>

@@ -19,16 +19,22 @@ export function Hero() {
             in one beautifully simple app. Open an account in minutes.
           </p>
           <div className="flex flex-col gap-3 sm:flex-row">
-            <Button asChild size="lg" className="h-12 px-6 text-base">
-              <Link href="/sign-up">Open your account</Link>
+            <Button
+              size="lg"
+              className="h-12 px-6 text-base"
+              nativeButton={false}
+              render={<Link href="/sign-up" />}
+            >
+              Open your account
             </Button>
             <Button
-              asChild
               size="lg"
               variant="outline"
               className="h-12 px-6 text-base"
+              nativeButton={false}
+              render={<a href="#features" />}
             >
-              <a href="#features">See how it works</a>
+              See how it works
             </Button>
           </div>
           <dl className="mt-4 flex gap-8">
