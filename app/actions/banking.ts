@@ -99,7 +99,6 @@ export async function ensureSeeded() {
     counterparty: 'Apex Bank',
   })
 
-  revalidatePath('/dashboard')
 }
 
 export async function getAccounts() {
