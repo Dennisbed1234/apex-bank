@@ -1,20 +1,11 @@
 'use client'
 
+import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { LogOut, User } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { ApexLogo } from '@/components/apex-logo'
-import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuGroup,
-  DropdownMenuItem,
-  DropdownMenuLabel,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 
 export function DashboardHeader({
@@ -25,6 +16,8 @@ export function DashboardHeader({
   email: string
 }) {
   const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const menuRef = useRef<HTMLDivElement>(null)
 
   const initials = name
     .split(' ')
@@ -32,6 +25,16 @@ export function DashboardHeader({
     .slice(0, 2)
     .join('')
     .toUpperCase()
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [])
 
   async function handleSignOut() {
     await authClient.signOut()
@@ -49,41 +52,40 @@ export function DashboardHeader({
           </span>
         </Link>
 
-        <DropdownMenu>
-          <DropdownMenuTrigger
-            render={
-              <Button variant="ghost" className="h-9 gap-2 px-2">
-                <Avatar className="size-7">
-                  <AvatarFallback className="text-xs font-semibold">
-                    {initials || <User />}
-                  </AvatarFallback>
-                </Avatar>
-                <span className="hidden text-sm font-medium text-foreground sm:inline">
-                  {name}
-                </span>
-              </Button>
-            }
-          />
-          <DropdownMenuContent align="end" className="w-56">
-            <DropdownMenuLabel className="px-2 py-1.5">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-sm font-medium text-foreground">
-                  {name}
-                </span>
-                <span className="truncate text-xs text-muted-foreground">
-                  {email}
-                </span>
+        <div className="relative" ref={menuRef}>
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="flex h-9 items-center gap-2 rounded-md px-2 hover:bg-accent"
+          >
+            <Avatar className="size-7">
+              <AvatarFallback className="text-xs font-semibold">
+                {initials || <User />}
+              </AvatarFallback>
+            </Avatar>
+            <span className="hidden text-sm font-medium text-foreground sm:inline">
+              {name}
+            </span>
+          </button>
+
+          {open && (
+            <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
+              <div className="px-2 py-1.5">
+                <div className="flex flex-col gap-0.5">
+                  <span className="text-sm font-medium text-foreground">{name}</span>
+                  <span className="truncate text-xs text-muted-foreground">{email}</span>
+                </div>
               </div>
-            </DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem variant="destructive" onClick={handleSignOut}>
-                <LogOut data-icon="inline-start" />
+              <div className="my-1 h-px bg-border" />
+              <button
+                onClick={handleSignOut}
+                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
+              >
+                <LogOut className="size-4" />
                 Sign out
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              </button>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   )
