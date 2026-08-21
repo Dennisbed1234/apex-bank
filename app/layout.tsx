@@ -17,6 +17,7 @@ export const metadata: Metadata = {
   },
   description:
     'Apex Bank is the modern way to bank: fee-free checking, high-yield savings, instant transfers, and real-time insights into your money.',
+  generator: 'v0.app',
   openGraph: {
     title: 'Apex Bank — Banking that works for you',
     description:
@@ -34,6 +35,7 @@ export const metadata: Metadata = {
   robots: {
     index: true,
     follow: true,
+  },
 }
 
 export const viewport: Viewport = {
