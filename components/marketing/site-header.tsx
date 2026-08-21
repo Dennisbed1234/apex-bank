@@ -32,6 +32,12 @@ export function SiteHeader() {
           >
             Security
           </a>
+          <Link
+            href="/about"
+            className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+          >
+            About
+          </Link>
         </nav>
 
         <div className="flex items-center gap-2">
