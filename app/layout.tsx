@@ -10,10 +10,30 @@ const manrope = Manrope({
 })
 
 export const metadata: Metadata = {
-  title: 'Apex Bank — Banking that works for you',
+  metadataBase: new URL('https://apex-bank-theta.vercel.app'),
+  title: {
+    default: 'Apex Bank — Banking that works for you',
+    template: '%s — Apex Bank',
+  },
   description:
     'Apex Bank is the modern way to bank: fee-free checking, high-yield savings, instant transfers, and real-time insights into your money.',
-  generator: 'v0.app',
+  openGraph: {
+    title: 'Apex Bank — Banking that works for you',
+    description:
+      'Fee-free checking, high-yield savings, and instant transfers — all in one simple app.',
+    url: 'https://apex-bank-theta.vercel.app',
+    siteName: 'Apex Bank',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'Apex Bank — Banking that works for you',
+    description:
+      'Fee-free checking, high-yield savings, and instant transfers — all in one simple app.',
+  },
+  robots: {
+    index: true,
+    follow: true,
 }
 
 export const viewport: Viewport = {
