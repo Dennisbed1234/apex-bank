@@ -9,8 +9,13 @@ import {
   type KycAdminRow,
   type MemberAccountRow,
 } from '@/app/actions/admin-ops'
+import {
+  listChatThreadsForAdmin,
+  type ChatThreadView,
+} from '@/app/actions/chat'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { OpsPanel } from '@/components/admin/ops-panel'
+import { OpsChat } from '@/components/admin/ops-chat'
 
 export const maxDuration = 60
 
@@ -29,6 +34,8 @@ export default async function OpsPage() {
 
   let members: MemberAccountRow[] = []
   let kycRows: KycAdminRow[] = []
+  let chatThreads: ChatThreadView[] = []
+
   try {
     members = await listMemberAccounts()
   } catch (err) {
@@ -39,6 +46,11 @@ export default async function OpsPage() {
   } catch (err) {
     console.error('[ops] listKycSubmissions failed', err)
   }
+  try {
+    chatThreads = await listChatThreadsForAdmin()
+  } catch (err) {
+    console.error('[ops] listChatThreadsForAdmin failed', err)
+  }
 
   return (
     <div className="min-h-svh bg-background">
@@ -47,6 +59,9 @@ export default async function OpsPage() {
         email={session.user.email || ADMIN_EMAIL}
       />
       <OpsPanel members={members} kycRows={kycRows} />
+      <div className="mx-auto max-w-6xl px-4 pb-10 sm:px-6">
+        <OpsChat threads={chatThreads} />
+      </div>
     </div>
   )
 }
