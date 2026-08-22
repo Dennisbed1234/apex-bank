@@ -2,13 +2,8 @@
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { CreditCard, Lock, ShieldCheck, Wifi } from 'lucide-react'
+import { CreditCard, Eye, EyeOff, Lock, ShieldCheck, Wifi } from 'lucide-react'
 import { toast } from 'sonner'
-
-function maskPan(accountNumber: string) {
-  const last4 = accountNumber.replace(/\D/g, '').slice(-4).padStart(4, '0')
-  return `4532  ••••  ••••  ${last4}`
-}
 
 const DESIGNS = [
   {
@@ -45,14 +40,22 @@ const DESIGNS = [
   },
 ] as const
 
+function maskFormatted(pan: string) {
+  const digits = pan.replace(/\D/g, '')
+  const last4 = digits.slice(-4)
+  return `••••  ••••  ••••  ${last4}`
+}
+
 function CardFace({
   design,
   memberName,
-  accountNumber,
+  cardNumber,
+  cardExp,
 }: {
   design: (typeof DESIGNS)[number]
   memberName: string
-  accountNumber: string
+  cardNumber: string
+  cardExp: string
 }) {
   return (
     <div
@@ -66,7 +69,7 @@ function CardFace({
           </div>
           <div>
             <p className="text-[11px] font-semibold tracking-[0.18em]">APEX BANK</p>
-            <p className={`text-[10px] ${design.muted}`}>PHYSICAL DEBIT</p>
+            <p className={`text-[10px] ${design.muted}`}>VISA DEBIT</p>
           </div>
         </div>
         <Wifi className={`size-5 rotate-90 ${design.muted}`} aria-hidden />
@@ -90,8 +93,8 @@ function CardFace({
         <CreditCard className={`size-5 ${design.muted}`} />
       </div>
 
-      <p className="relative mt-5 font-mono text-lg tracking-[0.16em] sm:text-xl">
-        {maskPan(accountNumber)}
+      <p className="relative mt-5 font-mono text-[17px] tracking-[0.14em] sm:text-xl">
+        {cardNumber}
       </p>
 
       <div className="relative mt-4 flex items-end justify-between gap-3">
@@ -101,7 +104,7 @@ function CardFace({
         </div>
         <div className="text-right">
           <p className={`text-[9px] uppercase tracking-wider ${design.muted}`}>Valid thru</p>
-          <p className="font-mono text-sm font-semibold">12/29</p>
+          <p className="font-mono text-sm font-semibold">{cardExp}</p>
         </div>
         <div className="text-right">
           <p className="text-[10px] font-bold italic tracking-wide">VISA</p>
@@ -115,14 +118,21 @@ function CardFace({
 export function DebitCard({
   memberName,
   accountNumber,
+  cardNumber,
+  cardExp,
+  cardCvv,
   kycStatus,
 }: {
   memberName: string
   accountNumber: string
+  cardNumber: string
+  cardExp: string
+  cardCvv: string
   kycStatus: string | null
 }) {
   const router = useRouter()
   const [selected, setSelected] = useState<(typeof DESIGNS)[number]['id']>('forest')
+  const [revealed, setRevealed] = useState(false)
   const approved = kycStatus === 'approved'
   const pending = kycStatus === 'pending'
   const design = DESIGNS.find((d) => d.id === selected) ?? DESIGNS[0]
@@ -131,7 +141,7 @@ export function DebitCard({
   function requireKyc(action: string) {
     if (approved) {
       toast.success(`${action} requested`, {
-        description: `${design.name} physical card will ship after production.`,
+        description: `${design.name} card ${cardNumber} will ship after production.`,
       })
       return
     }
@@ -158,7 +168,7 @@ export function DebitCard({
             Choose your Apex card
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Four finishes. Same checking account. Ships only after KYC approval.
+            Each member receives a unique Visa debit number. Checking {accountNumber}.
           </p>
         </div>
         {approved ? (
@@ -181,9 +191,38 @@ export function DebitCard({
 
       <div className="mt-5 flex justify-center">
         <div className="w-full max-w-[380px]">
-          <CardFace design={design} memberName={displayName} accountNumber={accountNumber} />
+          <CardFace
+            design={design}
+            memberName={displayName}
+            cardNumber={revealed ? cardNumber : maskFormatted(cardNumber)}
+            cardExp={cardExp}
+          />
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={() => setRevealed((v) => !v)}
+        className="mx-auto mt-3 flex items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground"
+      >
+        {revealed ? <EyeOff className="size-3.5" /> : <Eye className="size-3.5" />}
+        {revealed ? 'Hide card number & CVV' : 'Show full Visa number & CVV'}
+      </button>
+
+      {revealed && (
+        <div className="mx-auto mt-3 grid max-w-[380px] grid-cols-2 gap-2 text-sm">
+          <div className="rounded-lg bg-muted/60 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">Visa number</p>
+            <p className="font-mono font-medium tabular-nums">{cardNumber}</p>
+          </div>
+          <div className="rounded-lg bg-muted/60 px-3 py-2">
+            <p className="text-[11px] text-muted-foreground">CVV / Exp</p>
+            <p className="font-mono font-medium tabular-nums">
+              {cardCvv} · {cardExp}
+            </p>
+          </div>
+        </div>
+      )}
 
       <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
         {DESIGNS.map((option) => (
@@ -197,10 +236,7 @@ export function DebitCard({
                 : 'border-border hover:border-foreground/20'
             }`}
           >
-            <div
-              className="h-14 w-full rounded-lg"
-              style={{ background: option.bg }}
-            />
+            <div className="h-14 w-full rounded-lg" style={{ background: option.bg }} />
             <p className="mt-2 text-sm font-semibold text-foreground">{option.name}</p>
             <p className="text-[11px] text-muted-foreground">{option.finish}</p>
           </button>
@@ -225,7 +261,7 @@ export function DebitCard({
         </button>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
-        Selecting a design is free. Issuing a physical card requires completed KYC on this website.
+        Card numbers are unique per member, start with Visa BIN 414720, and pass the Luhn check.
       </p>
     </section>
   )
