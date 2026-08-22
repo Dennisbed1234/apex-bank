@@ -11,6 +11,10 @@ import {
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
+/**
+ * Near-real-time chat via short polling (2s).
+ * True push (WebSocket / SSE / Ably) can replace this later without UI changes.
+ */
 export function ChatSupport() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessageView[]>([])
@@ -18,14 +22,15 @@ export function ChatSupport() {
   const [loaded, setLoaded] = useState(false)
   const [isPending, startTransition] = useTransition()
   const bottomRef = useRef<HTMLDivElement>(null)
+  const lastCount = useRef(0)
 
   async function refresh() {
     try {
       const data = await getMyChat()
       setMessages(data.messages)
       setLoaded(true)
+      lastCount.current = data.messages.length
     } catch {
-      // Not signed in or error - widget still shows for signed-in users only on open
       setLoaded(true)
     }
   }
@@ -33,9 +38,10 @@ export function ChatSupport() {
   useEffect(() => {
     if (!open) return
     void refresh()
+    // Fast poll for near-instant admin replies without extra infra
     const id = setInterval(() => {
       void refresh()
-    }, 8000)
+    }, 2000)
     return () => clearInterval(id)
   }, [open])
 
@@ -65,7 +71,7 @@ export function ChatSupport() {
           <div className="flex items-center justify-between border-b border-border bg-primary px-4 py-3 text-primary-foreground">
             <div>
               <p className="text-sm font-semibold">Chat support</p>
-              <p className="text-xs opacity-90">Apex Bank help desk</p>
+              <p className="text-xs opacity-90">Live help · replies in seconds</p>
             </div>
             <button
               type="button"

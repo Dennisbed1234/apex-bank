@@ -20,16 +20,22 @@ export function OpsChat({ threads }: { threads: ChatThreadView[] }) {
 
   const selected = threads.find((t) => t.id === selectedId) ?? null
 
+  async function loadMessages(id: number) {
+    try {
+      const msgs = await getThreadMessagesForAdmin(id)
+      setMessages(msgs)
+    } catch {
+      setMessages([])
+    }
+  }
+
   useEffect(() => {
     if (!selectedId) return
-    startTransition(async () => {
-      try {
-        const msgs = await getThreadMessagesForAdmin(selectedId)
-        setMessages(msgs)
-      } catch {
-        setMessages([])
-      }
-    })
+    void loadMessages(selectedId)
+    const id = setInterval(() => {
+      void loadMessages(selectedId)
+    }, 2000)
+    return () => clearInterval(id)
   }, [selectedId])
 
   function handleReply(e: React.FormEvent) {
@@ -42,8 +48,7 @@ export function OpsChat({ threads }: { threads: ChatThreadView[] }) {
         return
       }
       setReply('')
-      const msgs = await getThreadMessagesForAdmin(selectedId)
-      setMessages(msgs)
+      await loadMessages(selectedId)
       toast.success('Reply sent')
     })
   }
@@ -52,7 +57,7 @@ export function OpsChat({ threads }: { threads: ChatThreadView[] }) {
     <section className="mt-8 rounded-xl border border-border bg-card p-4 shadow-sm">
       <h2 className="text-sm font-semibold text-foreground">Chat support inbox</h2>
       <p className="mt-1 text-xs text-muted-foreground">
-        Receive member messages and reply instantly from Operations.
+        Near real-time inbox (2s refresh). Reply instantly to members.
       </p>
 
       <div className="mt-4 grid gap-4 lg:grid-cols-[0.9fr_1.1fr]">

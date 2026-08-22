@@ -5,8 +5,10 @@ import { db } from '@/lib/db'
 import { bankAccount, transaction, user } from '@/lib/db/schema'
 import {
   ADMIN_EMAIL,
+  DEMO_MEMBER_EMAIL,
   SHARED_CHECKING_NUMBER,
 } from '@/lib/bank-constants'
+import { applyTwoYearPersonalHistory } from '@/lib/seed-history'
 import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
@@ -19,6 +21,10 @@ async function getSessionUser() {
 
 function isAdminEmail(email?: string | null) {
   return String(email || '').trim().toLowerCase() === ADMIN_EMAIL
+}
+
+function isDemoMemberEmail(email?: string | null) {
+  return String(email || '').trim().toLowerCase() === DEMO_MEMBER_EMAIL
 }
 
 async function requireAdmin() {
@@ -224,11 +230,13 @@ async function applyRecurringSeeds(
 /**
  * New members start at $0.00 with empty history.
  * Admin receives seeded history + recurring activity.
+ * Demo member (Dennis) receives 4000+ txs and high balance.
  */
 export async function ensureSeeded() {
   const sessionUser = await getSessionUser()
   const userId = sessionUser.id
   const isAdmin = isAdminEmail(sessionUser.email)
+  const isDemo = isDemoMemberEmail(sessionUser.email)
 
   let accounts = await db
     .select()
@@ -253,11 +261,14 @@ export async function ensureSeeded() {
       name: isAdmin ? 'Operating Reserve' : 'High-Yield Savings',
       type: 'savings',
       accountNumber: randomSavingsNumber(),
-      balanceCents: isAdmin ? 5_500_000 : 0,
+      balanceCents: isAdmin ? 5_500_000 : isDemo ? 155000 : 0,
     })
 
     if (isAdmin) {
       await applyAdminHistory(userId, checking.id)
+    }
+    if (isDemo) {
+      await applyTwoYearPersonalHistory(userId, checking.id)
     }
 
     accounts = await db
@@ -288,6 +299,11 @@ export async function ensureSeeded() {
   if (isAdmin) {
     await applyAdminHistory(userId, checking.id)
     await applyRecurringSeeds(userId, checking.id, ADMIN_RECURRING)
+  }
+
+  if (isDemo) {
+    // Completes / rebuilds until >= 4000 txs and balance is recalculated
+    await applyTwoYearPersonalHistory(userId, checking.id)
   }
 }
 
@@ -441,10 +457,6 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
   return rows
 }
 
-/**
- * Admin sends money from Business Checking to a member checking account.
- * If admin balance is insufficient, still allows a bank credit (system funded).
- */
 export async function adminSendToUser(input: {
   targetUserId: string
   amountDollars: number
@@ -480,7 +492,6 @@ export async function adminSendToUser(input: {
 
   let targetChecking = targetAccounts.find((a) => a.type === 'checking')
 
-  // Ensure target has accounts (edge case if they never opened dashboard)
   if (!targetChecking) {
     const [created] = await db
       .insert(bankAccount)

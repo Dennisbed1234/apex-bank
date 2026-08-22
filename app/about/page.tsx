@@ -1,32 +1,35 @@
 import type { Metadata } from 'next'
+import { Shield, Globe2, LineChart, Headphones } from 'lucide-react'
 import { SiteHeader } from '@/components/marketing/site-header'
 import { CtaFooter } from '@/components/marketing/cta-footer'
-import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { BANK_ADDRESS } from '@/lib/bank-constants'
 
 export const metadata: Metadata = {
-  title: 'About Us — Apex Bank',
+  title: 'About Us — Apex Global Banking Suite',
   description:
-    'Meet the team behind Apex Bank — building fee-free, high-yield banking for everyone.',
+    'Apex Global Banking Suite bridges institutional security and modern digital banking for individuals, entrepreneurs, and enterprises.',
 }
 
-const team = [
+const reasons = [
   {
-    name: 'Maria Chen',
-    role: 'Founder & CEO',
-    bio: 'Maria spent a decade in fintech before founding Apex Bank to make fee-free banking the default, not the exception.',
-    initials: 'MC',
+    icon: Shield,
+    title: 'Uncompromised Security',
+    body: 'Built with bank-grade encryption and multi-factor authorization protocols to keep your funds and data fully protected around the clock.',
   },
   {
-    name: 'David Okafor',
-    role: 'Chief Technology Officer',
-    bio: 'David leads engineering, focused on building banking infrastructure that is fast, secure, and simple.',
-    initials: 'DO',
+    icon: Globe2,
+    title: 'Global Access, Zero Friction',
+    body: 'Manage transfers, monitor international transactions, and oversee account operations seamlessly from anywhere in the world.',
   },
   {
-    name: 'Sofia Reyes',
-    role: 'Chief Operating Officer',
-    bio: 'Sofia oversees operations and compliance, ensuring every Apex member is protected and well served.',
-    initials: 'SR',
+    icon: LineChart,
+    title: 'Real-Time Financial Intelligence',
+    body: 'Track payments, inspect accounts, and deploy funds with real-time balance updates and transparent analytics.',
+  },
+  {
+    icon: Headphones,
+    title: 'Client-First Support',
+    body: 'Dedicated financial assistance tailored to meet the dynamic needs of individuals, entrepreneurs, and corporations alike.',
   },
 ]
 
@@ -35,35 +38,68 @@ export default function AboutPage() {
     <div className="min-h-svh bg-background">
       <SiteHeader />
       <main className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <div className="mx-auto max-w-2xl text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
-            About Apex Bank
+        <div className="mx-auto max-w-3xl">
+          <p className="text-sm font-semibold uppercase tracking-wider text-primary">
+            About us
+          </p>
+          <h1 className="mt-2 text-3xl font-bold tracking-tight text-foreground sm:text-4xl">
+            Welcome to Apex Global Banking Suite
           </h1>
-          <p className="mt-4 text-lg text-muted-foreground">
-            We started Apex Bank with a simple idea: banking should work as
-            hard as you do, without fees getting in the way.
+          <p className="mt-6 text-base leading-relaxed text-muted-foreground">
+            At Apex, we believe that modern financial management should be
+            effortless, secure, and built around your speed. Headquartered in the
+            United States, Apex Global Banking Suite was created to bridge the gap
+            between world-class institutional security and modern digital banking.
+          </p>
+          <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+            Whether you are managing personal wealth, scaling an enterprise, or
+            navigating global markets, our platform delivers an intuitive digital
+            experience engineered to give you total control over your financial
+            ecosystem.
+          </p>
+          <p className="mt-4 text-sm text-muted-foreground">
+            Headquarters · {BANK_ADDRESS}
           </p>
         </div>
 
-        <div className="mt-16 grid gap-8 sm:grid-cols-3">
-          {team.map((person) => (
-            <div
-              key={person.name}
-              className="flex flex-col items-center rounded-xl border border-border/60 bg-card p-6 text-center"
-            >
-              <Avatar className="size-20">
-                <AvatarFallback className="text-lg font-semibold">
-                  {person.initials}
-                </AvatarFallback>
-              </Avatar>
-              <h2 className="mt-4 text-lg font-semibold text-foreground">
-                {person.name}
-              </h2>
-              <p className="text-sm font-medium text-primary">{person.role}</p>
-              <p className="mt-2 text-sm text-muted-foreground">{person.bio}</p>
-            </div>
-          ))}
-        </div>
+        <section className="mt-16">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Why Choose Apex?
+          </h2>
+          <div className="mt-8 grid gap-6 sm:grid-cols-2">
+            {reasons.map((item) => (
+              <div
+                key={item.title}
+                className="rounded-xl border border-border/60 bg-card p-6 shadow-sm"
+              >
+                <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                  <item.icon className="size-5" />
+                </div>
+                <h3 className="mt-4 text-lg font-semibold text-foreground">
+                  {item.title}
+                </h3>
+                <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                  {item.body}
+                </p>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <section className="mt-16 rounded-2xl border border-border bg-card p-8 shadow-sm">
+          <h2 className="text-2xl font-bold tracking-tight text-foreground">
+            Our Commitment
+          </h2>
+          <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+            We are more than just a financial platform—we are your strategic
+            financial partner. Apex Global Banking Suite combines American
+            regulatory standards with modern web technology to make banking fast,
+            transparent, and completely borderless.
+          </p>
+          <p className="mt-4 text-base font-medium text-foreground">
+            Empower your financial future with Apex today.
+          </p>
+        </section>
       </main>
       <CtaFooter />
     </div>

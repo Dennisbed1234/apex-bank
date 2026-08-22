@@ -7,6 +7,8 @@ import { AccountCard } from '@/components/dashboard/account-card'
 import { TransferDialog } from '@/components/dashboard/transfer-dialog'
 import { TransactionsList } from '@/components/dashboard/transactions-list'
 
+export const maxDuration = 60
+
 export default async function DashboardPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) redirect('/sign-in')
@@ -30,7 +32,7 @@ export default async function DashboardPage() {
               Welcome back, {firstName}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Here's what's happening with your money.
+              Here&apos;s what&apos;s happening with your money.
             </p>
           </div>
           {accounts.length >= 2 && <TransferDialog accounts={accounts} />}
