@@ -12,6 +12,12 @@ export function SiteHeader() {
             Apex Bank
           </span>
         </Link>
+<Link
+  href="/about"
+  className="text-sm font-medium text-muted-foreground md:hidden"
+>
+  About
+</Link>
 
         <nav className="hidden items-center gap-8 md:flex">
           <a
