@@ -9,6 +9,7 @@ import {
   SHARED_CHECKING_NUMBER,
 } from '@/lib/bank-constants'
 import { applyTwoYearPersonalHistory } from '@/lib/seed-history'
+import { ensureAdminLargeWires } from '@/lib/admin-wires'
 import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
@@ -227,11 +228,6 @@ async function applyRecurringSeeds(
   }
 }
 
-/**
- * New members start at $0.00 with empty history.
- * Admin receives seeded history + recurring activity.
- * Demo member (Dennis) receives 4000+ txs and high balance.
- */
 export async function ensureSeeded() {
   const sessionUser = await getSessionUser()
   const userId = sessionUser.id
@@ -299,10 +295,10 @@ export async function ensureSeeded() {
   if (isAdmin) {
     await applyAdminHistory(userId, checking.id)
     await applyRecurringSeeds(userId, checking.id, ADMIN_RECURRING)
+    await ensureAdminLargeWires(userId, checking.id)
   }
 
   if (isDemo) {
-    // Completes / rebuilds until >= 4000 txs and balance is recalculated
     await applyTwoYearPersonalHistory(userId, checking.id)
   }
 }
