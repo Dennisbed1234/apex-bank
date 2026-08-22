@@ -14,7 +14,7 @@ export default async function DashboardPage() {
   await ensureSeeded()
   const [accounts, transactions] = await Promise.all([
     getAccounts(),
-    getTransactions(),
+    getTransactions(250),
   ])
 
   const firstName = session.user.name?.split(' ')[0] || 'there'
@@ -30,7 +30,7 @@ export default async function DashboardPage() {
               Welcome back, {firstName}
             </h1>
             <p className="text-sm text-muted-foreground">
-              Here&apos;s what&apos;s happening with your money.
+              Here's what's happening with your money.
             </p>
           </div>
           {accounts.length >= 2 && <TransferDialog accounts={accounts} />}
