@@ -10,11 +10,28 @@ export default async function SettingsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) redirect('/sign-in')
 
-  const profile = await getProfileSettings()
+  let phone = ''
+  let kyc: {
+    status: string
+    idType: string
+    ssnLast4: string
+    submittedAt: string
+  } | null = null
+
+  try {
+    const profile = await getProfileSettings()
+    phone = profile.phone || ''
+    kyc = profile.kyc
+  } catch (err) {
+    console.error('[settings page] load failed', err)
+  }
 
   return (
     <div className="min-h-svh bg-background">
-      <DashboardHeader name={session.user.name} email={session.user.email} />
+      <DashboardHeader
+        name={session.user.name || 'Account'}
+        email={session.user.email || ''}
+      />
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <div className="mb-6 flex items-center justify-between gap-3">
           <div>
@@ -30,7 +47,7 @@ export default async function SettingsPage() {
             Back to dashboard
           </Link>
         </div>
-        <SettingsForm initialPhone={profile.phone} kyc={profile.kyc} />
+        <SettingsForm initialPhone={phone} kyc={kyc} />
       </main>
     </div>
   )
