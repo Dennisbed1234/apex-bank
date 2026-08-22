@@ -73,7 +73,7 @@ export function DashboardHeader({
           </button>
 
           {open && (
-            <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
+            <div className="absolute right-0 z-50 mt-2 w-64 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
               <div className="px-2 py-1.5">
                 <div className="flex flex-col gap-0.5">
                   <span className="text-sm font-medium text-foreground">{safeName}</span>
@@ -95,7 +95,7 @@ export function DashboardHeader({
                 onClick={() => setOpen(false)}
               >
                 <FileText className="size-4" />
-                Download statement (PDF)
+                12-month statement (PDF)
               </a>
               {isAdmin && (
                 <Link

@@ -1,43 +1,14 @@
-/** Minimal PDF text builder (no external deps). */
+/** Minimal multi-page PDF text builder (no external deps). */
 
 function escapePdfText(value: string) {
-  return value.replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
+  return value
+    .replace(/\\/g, '\\\\')
+    .replace(/\(/g, '\\(')
+    .replace(/\)/g, '\\)')
 }
 
-export function buildStatementPdf(input: {
-  memberName: string
-  memberEmail: string
-  routingNumber: string
-  accounts: Array<{ name: string; type: string; accountNumber: string; balanceLabel: string }>
-  transactions: Array<{ date: string; description: string; amountLabel: string }>
-  generatedAt: string
-}): Uint8Array {
-  const lines: string[] = []
-  lines.push('Apex Bank — Account Statement')
-  lines.push(`Generated: ${input.generatedAt}`)
-  lines.push(`Member: ${input.memberName}`)
-  lines.push(`Email: ${input.memberEmail}`)
-  lines.push(`Routing: ${input.routingNumber}`)
-  lines.push('')
-  lines.push('Accounts')
-  for (const a of input.accounts) {
-    lines.push(
-      `- ${a.name} (${a.type})  Acct ${a.accountNumber}  Bal ${a.balanceLabel}`
-    )
-  }
-  lines.push('')
-  lines.push('Recent transactions')
-  const txSlice = input.transactions.slice(0, 80)
-  for (const t of txSlice) {
-    lines.push(`${t.date}  ${t.amountLabel.padStart(12)}  ${t.description}`)
-  }
-  if (input.transactions.length > txSlice.length) {
-    lines.push(`... and ${input.transactions.length - txSlice.length} more transactions on file`)
-  }
-  lines.push('')
-  lines.push('Apex Bank · Member FDIC · For demonstration purposes')
-
-  const contentParts: string[] = ['BT', '/F1 10 Tf', '50 780 Td', '14 TL']
+function buildPageContent(lines: string[]) {
+  const contentParts: string[] = ['BT', '/F1 9 Tf', '40 770 Td', '12 TL']
   lines.forEach((line, idx) => {
     if (idx === 0) {
       contentParts.push(`(${escapePdfText(line)}) Tj`)
@@ -47,18 +18,91 @@ export function buildStatementPdf(input: {
     }
   })
   contentParts.push('ET')
-  const stream = contentParts.join('\n')
+  return contentParts.join('\n')
+}
+
+export function buildStatementPdf(input: {
+  memberName: string
+  memberEmail: string
+  routingNumber: string
+  periodLabel: string
+  accounts: Array<{ name: string; type: string; accountNumber: string; balanceLabel: string }>
+  transactions: Array<{ date: string; description: string; amountLabel: string; accountLabel?: string }>
+  generatedAt: string
+}): Uint8Array {
+  const header: string[] = [
+    'Apex Bank — 12-Month Account Statement',
+    `Generated: ${input.generatedAt}`,
+    `Statement period: ${input.periodLabel}`,
+    `Member: ${input.memberName}`,
+    `Email: ${input.memberEmail}`,
+    `Routing number: ${input.routingNumber}`,
+    '',
+    'Accounts (current balances)',
+  ]
+
+  for (const a of input.accounts) {
+    header.push(
+      `- ${a.name} (${a.type})  Acct ${a.accountNumber}  Balance ${a.balanceLabel}`
+    )
+  }
+
+  header.push('')
+  header.push(
+    `Activity matching your ledger (${input.transactions.length} transactions in period)`
+  )
+  header.push('Date          Amount         Description')
+
+  const bodyLines = input.transactions.map((t) => {
+    const desc = t.description.length > 70 ? t.description.slice(0, 67) + '...' : t.description
+    return `${t.date.padEnd(12)} ${t.amountLabel.padStart(12)}  ${desc}`
+  })
+
+  const allLines = [...header, ...bodyLines, '', 'Apex Bank · Member FDIC · Statement reflects account history on file']
+
+  // ~60 lines per page at 12pt leading on letter size
+  const LINES_PER_PAGE = 58
+  const pages: string[][] = []
+  for (let i = 0; i < allLines.length; i += LINES_PER_PAGE) {
+    pages.push(allLines.slice(i, i + LINES_PER_PAGE))
+  }
+  if (pages.length === 0) pages.push(['Apex Bank — empty statement'])
 
   const objects: string[] = []
+  // 1 catalog, 2 pages root, then N page objs, N content objs, 1 font
+  // Object numbering:
+  // 1 = Catalog
+  // 2 = Pages
+  // 3..2+N = Page
+  // 3+N .. 2+2N = Contents
+  // 3+2N = Font
+
+  const n = pages.length
+  const pageObjIds = Array.from({ length: n }, (_, i) => 3 + i)
+  const contentObjIds = Array.from({ length: n }, (_, i) => 3 + n + i)
+  const fontObjId = 3 + 2 * n
+
   objects.push('1 0 obj<< /Type /Catalog /Pages 2 0 R >>endobj')
-  objects.push('2 0 obj<< /Type /Pages /Kids [3 0 R] /Count 1 >>endobj')
   objects.push(
-    '3 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >>endobj'
+    `2 0 obj<< /Type /Pages /Kids [${pageObjIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${n} >>endobj`
   )
+
+  for (let i = 0; i < n; i++) {
+    objects.push(
+      `${pageObjIds[i]} 0 obj<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${contentObjIds[i]} 0 R /Resources << /Font << /F1 ${fontObjId} 0 R >> >> >>endobj`
+    )
+  }
+
+  for (let i = 0; i < n; i++) {
+    const stream = buildPageContent(pages[i])
+    objects.push(
+      `${contentObjIds[i]} 0 obj<< /Length ${stream.length} >>stream\n${stream}\nendstream\nendobj`
+    )
+  }
+
   objects.push(
-    `4 0 obj<< /Length ${stream.length} >>stream\n${stream}\nendstream\nendobj`
+    `${fontObjId} 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj`
   )
-  objects.push('5 0 obj<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>endobj')
 
   let pdf = '%PDF-1.4\n'
   const offsets: number[] = [0]

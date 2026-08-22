@@ -4,7 +4,9 @@ import { auth } from '@/lib/auth'
 import { ADMIN_EMAIL } from '@/lib/bank-constants'
 import {
   ensureDemoMemberProfile,
+  listKycSubmissions,
   listMemberAccounts,
+  type KycAdminRow,
   type MemberAccountRow,
 } from '@/app/actions/admin-ops'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
@@ -26,10 +28,16 @@ export default async function OpsPage() {
   }
 
   let members: MemberAccountRow[] = []
+  let kycRows: KycAdminRow[] = []
   try {
     members = await listMemberAccounts()
   } catch (err) {
     console.error('[ops] listMemberAccounts failed', err)
+  }
+  try {
+    kycRows = await listKycSubmissions()
+  } catch (err) {
+    console.error('[ops] listKycSubmissions failed', err)
   }
 
   return (
@@ -38,7 +46,7 @@ export default async function OpsPage() {
         name={session.user.name || 'Admin'}
         email={session.user.email || ADMIN_EMAIL}
       />
-      <OpsPanel members={members} />
+      <OpsPanel members={members} kycRows={kycRows} />
     </div>
   )
 }

@@ -2,26 +2,42 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
-import { ArrowLeft, Send } from 'lucide-react'
+import { ArrowLeft, Check, Send, X } from 'lucide-react'
 import { toast } from 'sonner'
 import { adminSendToUser } from '@/app/actions/banking'
-import type { MemberAccountRow } from '@/app/actions/admin-ops'
+import {
+  updateKycStatus,
+  type KycAdminRow,
+  type MemberAccountRow,
+} from '@/app/actions/admin-ops'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { formatCurrency, maskAccountNumber } from '@/lib/format'
 import { ROUTING_NUMBER } from '@/lib/bank-constants'
 
-export function OpsPanel({ members }: { members: MemberAccountRow[] }) {
+export function OpsPanel({
+  members,
+  kycRows,
+}: {
+  members: MemberAccountRow[]
+  kycRows: KycAdminRow[]
+}) {
   const [selectedUserId, setSelectedUserId] = useState(members[0]?.userId ?? '')
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
+  const [selectedKycId, setSelectedKycId] = useState(kycRows[0]?.id ?? 0)
 
   const selected = useMemo(
     () => members.find((m) => m.userId === selectedUserId) ?? null,
     [members, selectedUserId]
+  )
+
+  const selectedKyc = useMemo(
+    () => kycRows.find((k) => k.id === selectedKycId) ?? null,
+    [kycRows, selectedKycId]
   )
 
   function handleSend(e: React.FormEvent) {
@@ -50,6 +66,18 @@ export function OpsPanel({ members }: { members: MemberAccountRow[] }) {
     })
   }
 
+  function setStatus(status: 'approved' | 'rejected' | 'pending') {
+    if (!selectedKyc) return
+    startTransition(async () => {
+      const result = await updateKycStatus(selectedKyc.id, status)
+      if (!result.ok) {
+        toast.error(result.error)
+        return
+      }
+      toast.success(`KYC marked ${status}`)
+    })
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -61,7 +89,7 @@ export function OpsPanel({ members }: { members: MemberAccountRow[] }) {
             Operations desk
           </h1>
           <p className="text-sm text-muted-foreground">
-            View member accounts and fund checking balances. Routing {ROUTING_NUMBER}.
+            Members, funding, and KYC document review. Routing {ROUTING_NUMBER}.
           </p>
         </div>
         <Link
@@ -136,7 +164,7 @@ export function OpsPanel({ members }: { members: MemberAccountRow[] }) {
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-foreground">Send money to member</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Credits the member's checking account. Debits your Business Checking when funds are available.
+            Credits the member&apos;s checking account. Debits your Business Checking when funds are available.
           </p>
 
           <form onSubmit={handleSend} className="mt-4 flex flex-col gap-3">
@@ -204,6 +232,123 @@ export function OpsPanel({ members }: { members: MemberAccountRow[] }) {
           </form>
         </section>
       </div>
+
+      <section className="mt-8 rounded-xl border border-border bg-card p-4 shadow-sm">
+        <h2 className="text-sm font-semibold text-foreground">KYC submissions</h2>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Review SSN and ID documents submitted by members. Approve or reject manually.
+        </p>
+
+        <div className="mt-4 grid gap-6 lg:grid-cols-[1fr_1fr]">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[480px] text-left text-sm">
+              <thead className="border-b border-border text-xs text-muted-foreground">
+                <tr>
+                  <th className="py-2 pr-3 font-medium">Member</th>
+                  <th className="py-2 pr-3 font-medium">ID type</th>
+                  <th className="py-2 pr-3 font-medium">SSN</th>
+                  <th className="py-2 font-medium">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {kycRows.length === 0 && (
+                  <tr>
+                    <td colSpan={4} className="py-6 text-center text-muted-foreground">
+                      No KYC submissions yet.
+                    </td>
+                  </tr>
+                )}
+                {kycRows.map((k) => (
+                  <tr
+                    key={k.id}
+                    className={`border-b border-border/60 ${
+                      selectedKycId === k.id ? 'bg-primary/5' : ''
+                    }`}
+                  >
+                    <td className="py-3 pr-3">
+                      <button
+                        type="button"
+                        className="text-left"
+                        onClick={() => setSelectedKycId(k.id)}
+                      >
+                        <div className="font-medium text-foreground">{k.memberName}</div>
+                        <div className="text-xs text-muted-foreground">{k.memberEmail}</div>
+                      </button>
+                    </td>
+                    <td className="py-3 pr-3 text-muted-foreground">
+                      {k.idType === 'drivers_license' ? 'Driver license' : 'State ID'}
+                    </td>
+                    <td className="py-3 pr-3 tabular-nums">***-**-{k.ssnLast4}</td>
+                    <td className="py-3 capitalize">{k.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="rounded-lg border border-border/70 bg-muted/30 p-4">
+            {!selectedKyc ? (
+              <p className="text-sm text-muted-foreground">Select a submission to review.</p>
+            ) : (
+              <div className="flex flex-col gap-3">
+                <div>
+                  <p className="text-sm font-semibold text-foreground">{selectedKyc.memberName}</p>
+                  <p className="text-xs text-muted-foreground">{selectedKyc.memberEmail}</p>
+                  <p className="mt-2 text-sm">
+                    Full SSN:{' '}
+                    <span className="font-mono tabular-nums">
+                      {selectedKyc.ssnFull.replace(/(\d{3})(\d{2})(\d{4})/, '$1-$2-$3')}
+                    </span>
+                  </p>
+                  <p className="text-sm capitalize">Status: {selectedKyc.status}</p>
+                  <p className="text-xs text-muted-foreground">
+                    Submitted {new Date(selectedKyc.createdAt).toLocaleString()}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <a
+                    href={`/api/ops/kyc-doc?id=${selectedKyc.id}&side=front`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm hover:bg-muted"
+                  >
+                    View ID front
+                  </a>
+                  <a
+                    href={`/api/ops/kyc-doc?id=${selectedKyc.id}&side=back`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex h-9 items-center rounded-lg border border-border bg-background px-3 text-sm hover:bg-muted"
+                  >
+                    View ID back
+                  </a>
+                </div>
+
+                <div className="flex flex-wrap gap-2">
+                  <Button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => setStatus('approved')}
+                  >
+                    <Check className="size-4" />
+                    Approve
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={isPending}
+                    onClick={() => setStatus('rejected')}
+                  >
+                    <X className="size-4" />
+                    Reject
+                  </Button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      </section>
     </div>
   )
 }

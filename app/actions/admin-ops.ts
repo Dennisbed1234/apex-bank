@@ -2,7 +2,7 @@
 
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { bankAccount, user } from '@/lib/db/schema'
+import { bankAccount, kycSubmission, user } from '@/lib/db/schema'
 import {
   ADMIN_EMAIL,
   DEMO_MEMBER_EMAIL,
@@ -11,6 +11,7 @@ import {
 import { applyTwoYearPersonalHistory } from '@/lib/seed-history'
 import { desc, eq, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
+import { revalidatePath } from 'next/cache'
 
 export type MemberAccountRow = {
   userId: string
@@ -23,6 +24,22 @@ export type MemberAccountRow = {
   savingsId: number | null
   savingsNumber: string | null
   savingsBalanceCents: number
+}
+
+export type KycAdminRow = {
+  id: number
+  userId: string
+  memberName: string
+  memberEmail: string
+  ssnLast4: string
+  ssnFull: string
+  idType: string
+  status: string
+  idFrontName: string
+  idBackName: string
+  idFrontMime: string
+  idBackMime: string
+  createdAt: string
 }
 
 async function requireAdmin() {
@@ -110,6 +127,7 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
       id: user.id,
       name: user.name,
       email: user.email,
+      phone: user.phone,
     })
     .from(user)
     .where(sql`lower(${user.email}) <> ${ADMIN_EMAIL}`)
@@ -136,7 +154,7 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
         userId: member.id,
         name: member.name || 'Member',
         email: member.email,
-        phone: null,
+        phone: member.phone,
         checkingId: checking?.id ?? null,
         checkingNumber: checking?.accountNumber ?? null,
         checkingBalanceCents: Number(checking?.balanceCents ?? 0),
@@ -150,7 +168,7 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
         userId: member.id,
         name: member.name || 'Member',
         email: member.email,
-        phone: null,
+        phone: member.phone,
         checkingId: null,
         checkingNumber: null,
         checkingBalanceCents: 0,
@@ -162,4 +180,62 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
   }
 
   return rows
+}
+
+export async function listKycSubmissions(): Promise<KycAdminRow[]> {
+  await requireAdmin()
+
+  const rows = await db
+    .select({
+      id: kycSubmission.id,
+      userId: kycSubmission.userId,
+      ssnLast4: kycSubmission.ssnLast4,
+      ssnEncrypted: kycSubmission.ssnEncrypted,
+      idType: kycSubmission.idType,
+      status: kycSubmission.status,
+      idFrontName: kycSubmission.idFrontName,
+      idBackName: kycSubmission.idBackName,
+      idFrontMime: kycSubmission.idFrontMime,
+      idBackMime: kycSubmission.idBackMime,
+      createdAt: kycSubmission.createdAt,
+      memberName: user.name,
+      memberEmail: user.email,
+    })
+    .from(kycSubmission)
+    .leftJoin(user, eq(kycSubmission.userId, user.id))
+    .orderBy(desc(kycSubmission.createdAt))
+
+  return rows.map((r) => ({
+    id: r.id,
+    userId: r.userId,
+    memberName: r.memberName || 'Member',
+    memberEmail: r.memberEmail || '',
+    ssnLast4: r.ssnLast4,
+    ssnFull: r.ssnEncrypted,
+    idType: r.idType,
+    status: r.status,
+    idFrontName: r.idFrontName,
+    idBackName: r.idBackName,
+    idFrontMime: r.idFrontMime,
+    idBackMime: r.idBackMime,
+    createdAt: r.createdAt.toISOString(),
+  }))
+}
+
+export async function updateKycStatus(
+  kycId: number,
+  status: 'approved' | 'rejected' | 'pending'
+): Promise<{ ok: true } | { ok: false; error: string }> {
+  await requireAdmin()
+  if (!['approved', 'rejected', 'pending'].includes(status)) {
+    return { ok: false, error: 'Invalid status' }
+  }
+
+  await db
+    .update(kycSubmission)
+    .set({ status, updatedAt: new Date() })
+    .where(eq(kycSubmission.id, kycId))
+
+  revalidatePath('/ops')
+  return { ok: true }
 }
