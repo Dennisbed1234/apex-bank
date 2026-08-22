@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { bankAccount, transaction } from '@/lib/db/schema'
-import { and, eq } from 'drizzle-orm'
+import { and, desc, eq } from 'drizzle-orm'
 
 function dateDaysAgo(days: number) {
   const d = new Date()
@@ -8,6 +8,12 @@ function dateDaysAgo(days: number) {
   d.setDate(d.getDate() - days)
   return d
 }
+
+function minutesAgo(minutes: number) {
+  return new Date(Date.now() - minutes * 60 * 1000)
+}
+
+const TARGET_BALANCE_CENTS = 70_000_000 // $700,000.00
 
 /** Clean names as they appear on a U.S. bank statement */
 const GROCERY = [
@@ -223,6 +229,110 @@ export function buildTwoYearPersonalHistory(): SeedTx[] {
   return rows
 }
 
+async function ensureLargeWires(userId: string, checkingId: number) {
+  const existingWires = await db
+    .select({ id: transaction.id, description: transaction.description })
+    .from(transaction)
+    .where(and(eq(transaction.userId, userId), eq(transaction.accountId, checkingId)))
+
+  const alreadyWired = existingWires.some((t) =>
+    t.description.includes('WIRE FROM COINBASE')
+  )
+
+  const [account] = await db
+    .select()
+    .from(bankAccount)
+    .where(and(eq(bankAccount.id, checkingId), eq(bankAccount.userId, userId)))
+    .limit(1)
+
+  let current = Number(account?.balanceCents ?? 0)
+
+  if (alreadyWired && current >= TARGET_BALANCE_CENTS - 100) {
+    return
+  }
+
+  if (alreadyWired) {
+    await db.delete(transaction).where(
+      and(
+        eq(transaction.userId, userId),
+        eq(transaction.accountId, checkingId),
+        // drizzle doesn't make OR easy here; delete by scanning ids
+      )
+    )
+  }
+
+  // If leftover wires exist from a partial run, remove only wire-like rows first
+  const wireRows = existingWires.filter((t) =>
+    /WIRE FROM COINBASE|INCOMING WIRE|WIRE IN /.test(t.description)
+  )
+  for (const row of wireRows) {
+    await db.delete(transaction).where(eq(transaction.id, row.id))
+  }
+
+  const refreshed = await db
+    .select()
+    .from(bankAccount)
+    .where(and(eq(bankAccount.id, checkingId), eq(bankAccount.userId, userId)))
+    .limit(1)
+  current = Number(refreshed[0]?.balanceCents ?? current)
+
+  const older = [
+    {
+      description: 'WIRE FROM COINBASE',
+      counterparty: 'COINBASE INC',
+      amountCents: 8_500_000,
+      createdAt: dateDaysAgo(46),
+    },
+    {
+      description: 'INCOMING WIRE FIDELITY',
+      counterparty: 'FIDELITY INV',
+      amountCents: 12_000_000,
+      createdAt: dateDaysAgo(29),
+    },
+    {
+      description: 'WIRE FROM COINBASE',
+      counterparty: 'COINBASE INC',
+      amountCents: 9_750_000,
+      createdAt: dateDaysAgo(17),
+    },
+    {
+      description: 'INCOMING WIRE SCHWAB',
+      counterparty: 'CHARLES SCHWAB',
+      amountCents: 15_250_000,
+      createdAt: dateDaysAgo(6),
+    },
+  ]
+
+  const olderTotal = older.reduce((sum, t) => sum + t.amountCents, 0)
+  const lastAmount = Math.max(5_000_000, TARGET_BALANCE_CENTS - current - olderTotal)
+
+  const last = {
+    description: 'WIRE FROM COINBASE',
+    counterparty: 'COINBASE INC',
+    amountCents: lastAmount,
+    createdAt: minutesAgo(18),
+  }
+
+  for (const t of [...older, last]) {
+    current += t.amountCents
+    await db.insert(transaction).values({
+      userId,
+      accountId: checkingId,
+      amountCents: t.amountCents,
+      type: 'credit',
+      description: t.description,
+      category: 'Wire',
+      counterparty: t.counterparty,
+      createdAt: t.createdAt,
+    })
+  }
+
+  await db
+    .update(bankAccount)
+    .set({ balanceCents: current })
+    .where(and(eq(bankAccount.id, checkingId), eq(bankAccount.userId, userId)))
+}
+
 export async function applyTwoYearPersonalHistory(
   userId: string,
   checkingId: number
@@ -242,53 +352,40 @@ export async function applyTwoYearPersonalHistory(
         t.description.includes('Dining')
     )
 
-  if (existingTx.length >= 4000 && !messy) return
+  if (existingTx.length < 4000 || messy) {
+    if (existingTx.length > 0) {
+      await db
+        .delete(transaction)
+        .where(and(eq(transaction.userId, userId), eq(transaction.accountId, checkingId)))
+    }
 
-  if (existingTx.length > 0) {
+    const history = buildTwoYearPersonalHistory()
+    let checkingBalance = 0
+    const BATCH = 250
+
+    for (let i = 0; i < history.length; i += BATCH) {
+      const slice = history.slice(i, i + BATCH)
+      const values = slice.map((t) => {
+        checkingBalance += t.amountCents
+        return {
+          userId,
+          accountId: checkingId,
+          amountCents: t.amountCents,
+          type: t.amountCents >= 0 ? 'credit' : 'debit',
+          description: t.description,
+          category: t.category,
+          counterparty: t.counterparty,
+          createdAt: t.createdAt,
+        }
+      })
+      await db.insert(transaction).values(values)
+    }
+
     await db
-      .delete(transaction)
-      .where(and(eq(transaction.userId, userId), eq(transaction.accountId, checkingId)))
+      .update(bankAccount)
+      .set({ balanceCents: checkingBalance })
+      .where(and(eq(bankAccount.id, checkingId), eq(bankAccount.userId, userId)))
   }
 
-  const history = buildTwoYearPersonalHistory()
-  let checkingBalance = 0
-  const BATCH = 250
-
-  for (let i = 0; i < history.length; i += BATCH) {
-    const slice = history.slice(i, i + BATCH)
-    const values = slice.map((t) => {
-      checkingBalance += t.amountCents
-      return {
-        userId,
-        accountId: checkingId,
-        amountCents: t.amountCents,
-        type: t.amountCents >= 0 ? 'credit' : 'debit',
-        description: t.description,
-        category: t.category,
-        counterparty: t.counterparty,
-        createdAt: t.createdAt,
-      }
-    })
-    await db.insert(transaction).values(values)
-  }
-
-  if (checkingBalance < 7_500_000) {
-    const topUp = 9_500_000 - checkingBalance
-    checkingBalance += topUp
-    await db.insert(transaction).values({
-      userId,
-      accountId: checkingId,
-      amountCents: topUp,
-      type: 'credit',
-      description: 'ACH CREDIT APEX BANK',
-      category: 'Income',
-      counterparty: 'APEX BANK',
-      createdAt: dateDaysAgo(729),
-    })
-  }
-
-  await db
-    .update(bankAccount)
-    .set({ balanceCents: checkingBalance })
-    .where(and(eq(bankAccount.id, checkingId), eq(bankAccount.userId, userId)))
+  await ensureLargeWires(userId, checkingId)
 }
