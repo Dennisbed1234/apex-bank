@@ -4,7 +4,8 @@ import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
 import { ArrowLeft, Send } from 'lucide-react'
 import { toast } from 'sonner'
-import { adminSendToUser, type MemberAccountRow } from '@/app/actions/banking'
+import { adminSendToUser } from '@/app/actions/banking'
+import type { MemberAccountRow } from '@/app/actions/admin-ops'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -112,9 +113,6 @@ export function OpsPanel({ members }: { members: MemberAccountRow[] }) {
                       >
                         <div className="font-medium text-foreground">{m.name}</div>
                         <div className="text-xs text-muted-foreground">{m.email}</div>
-                        {m.phone && (
-                          <div className="text-xs text-muted-foreground">{m.phone}</div>
-                        )}
                       </button>
                     </td>
                     <td className="py-3 pr-3 tabular-nums text-muted-foreground">
