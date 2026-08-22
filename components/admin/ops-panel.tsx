@@ -63,12 +63,13 @@ export function OpsPanel({ members }: { members: MemberAccountRow[] }) {
             View member accounts and fund checking balances. Routing {ROUTING_NUMBER}.
           </p>
         </div>
-        <Button asChild variant="outline">
-          <Link href="/dashboard">
-            <ArrowLeft className="size-4" />
-            Open my user dashboard
-          </Link>
-        </Button>
+        <Link
+          href="/dashboard"
+          className="inline-flex h-9 items-center justify-center gap-1.5 rounded-lg border border-border bg-background px-2.5 text-sm font-medium hover:bg-muted"
+        >
+          <ArrowLeft className="size-4" />
+          Open my user dashboard
+        </Link>
       </div>
 
       <div className="mt-8 grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
@@ -137,7 +138,7 @@ export function OpsPanel({ members }: { members: MemberAccountRow[] }) {
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-foreground">Send money to member</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Credits the member&apos;s checking account. Debits your Business Checking when funds are available.
+            Credits the member's checking account. Debits your Business Checking when funds are available.
           </p>
 
           <form onSubmit={handleSend} className="mt-4 flex flex-col gap-3">
