@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { bankAccount, transaction } from '@/lib/db/schema'
-import { and, desc, eq } from 'drizzle-orm'
+import { and, eq } from 'drizzle-orm'
 
 function dateDaysAgo(days: number) {
   const d = new Date()
@@ -15,7 +15,6 @@ function minutesAgo(minutes: number) {
 
 const TARGET_BALANCE_CENTS = 70_000_000 // $700,000.00
 
-/** Clean names as they appear on a U.S. bank statement */
 const GROCERY = [
   'WALMART',
   'COSTCO WHSE',
@@ -230,14 +229,14 @@ export function buildTwoYearPersonalHistory(): SeedTx[] {
 }
 
 async function ensureLargeWires(userId: string, checkingId: number) {
-  const existingWires = await db
-    .select({ id: transaction.id, description: transaction.description })
+  const existing = await db
+    .select({
+      id: transaction.id,
+      description: transaction.description,
+      amountCents: transaction.amountCents,
+    })
     .from(transaction)
     .where(and(eq(transaction.userId, userId), eq(transaction.accountId, checkingId)))
-
-  const alreadyWired = existingWires.some((t) =>
-    t.description.includes('WIRE FROM COINBASE')
-  )
 
   const [account] = await db
     .select()
@@ -246,35 +245,16 @@ async function ensureLargeWires(userId: string, checkingId: number) {
     .limit(1)
 
   let current = Number(account?.balanceCents ?? 0)
+  const alreadyWired = existing.some((t) => t.description.includes('WIRE FROM COINBASE'))
+  if (alreadyWired && current >= TARGET_BALANCE_CENTS - 100) return
 
-  if (alreadyWired && current >= TARGET_BALANCE_CENTS - 100) {
-    return
-  }
-
-  if (alreadyWired) {
-    await db.delete(transaction).where(
-      and(
-        eq(transaction.userId, userId),
-        eq(transaction.accountId, checkingId),
-        // drizzle doesn't make OR easy here; delete by scanning ids
-      )
-    )
-  }
-
-  // If leftover wires exist from a partial run, remove only wire-like rows first
-  const wireRows = existingWires.filter((t) =>
+  const wireRows = existing.filter((t) =>
     /WIRE FROM COINBASE|INCOMING WIRE|WIRE IN /.test(t.description)
   )
   for (const row of wireRows) {
+    current -= Number(row.amountCents || 0)
     await db.delete(transaction).where(eq(transaction.id, row.id))
   }
-
-  const refreshed = await db
-    .select()
-    .from(bankAccount)
-    .where(and(eq(bankAccount.id, checkingId), eq(bankAccount.userId, userId)))
-    .limit(1)
-  current = Number(refreshed[0]?.balanceCents ?? current)
 
   const older = [
     {
