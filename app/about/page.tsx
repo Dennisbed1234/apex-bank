@@ -2,6 +2,7 @@ import type { Metadata } from 'next'
 import { Shield, Globe2, LineChart, Headphones } from 'lucide-react'
 import { SiteHeader } from '@/components/marketing/site-header'
 import { CtaFooter } from '@/components/marketing/cta-footer'
+import { Avatar, AvatarFallback } from '@/components/ui/avatar'
 import { BANK_ADDRESS } from '@/lib/bank-constants'
 
 export const metadata: Metadata = {
@@ -30,6 +31,27 @@ const reasons = [
     icon: Headphones,
     title: 'Client-First Support',
     body: 'Dedicated financial assistance tailored to meet the dynamic needs of individuals, entrepreneurs, and corporations alike.',
+  },
+]
+
+const team = [
+  {
+    name: 'Maria Chen',
+    role: 'Founder & CEO',
+    bio: 'Maria spent a decade in fintech before founding Apex Bank to make fee-free banking the default, not the exception.',
+    initials: 'MC',
+  },
+  {
+    name: 'David Okafor',
+    role: 'Chief Technology Officer',
+    bio: 'David leads engineering, focused on building banking infrastructure that is fast, secure, and simple.',
+    initials: 'DO',
+  },
+  {
+    name: 'Sofia Reyes',
+    role: 'Chief Operating Officer',
+    bio: 'Sofia oversees operations and compliance, ensuring every Apex member is protected and well served.',
+    initials: 'SR',
   },
 ]
 
@@ -99,6 +121,34 @@ export default function AboutPage() {
           <p className="mt-4 text-base font-medium text-foreground">
             Empower your financial future with Apex today.
           </p>
+        </section>
+
+        <section className="mt-16">
+          <h2 className="text-center text-2xl font-bold tracking-tight text-foreground">
+            Leadership
+          </h2>
+          <p className="mx-auto mt-2 max-w-xl text-center text-sm text-muted-foreground">
+            The team guiding Apex Global Banking Suite.
+          </p>
+          <div className="mt-10 grid gap-8 sm:grid-cols-3">
+            {team.map((person) => (
+              <div
+                key={person.name}
+                className="flex flex-col items-center rounded-xl border border-border/60 bg-card p-6 text-center"
+              >
+                <Avatar className="size-20">
+                  <AvatarFallback className="text-lg font-semibold">
+                    {person.initials}
+                  </AvatarFallback>
+                </Avatar>
+                <h3 className="mt-4 text-lg font-semibold text-foreground">
+                  {person.name}
+                </h3>
+                <p className="text-sm font-medium text-primary">{person.role}</p>
+                <p className="mt-2 text-sm text-muted-foreground">{person.bio}</p>
+              </div>
+            ))}
+          </div>
         </section>
       </main>
       <CtaFooter />

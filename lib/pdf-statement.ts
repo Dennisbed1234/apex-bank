@@ -1,39 +1,24 @@
-/** Minimal multi-page PDF text builder (ASCII-safe, no external deps). */
+/** Simple valid multi-page PDF (ASCII-only, no external deps). */
 
 function toAscii(value: string) {
-  return value
-    .replace(/[—–−]/g, '-')
-    .replace(/[·•]/g, '-')
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/[^
-	
- -~]/g, '')
+  return String(value || '')
+    .replace(/[^\x20-\x7E]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
 }
 
-function escapePdfText(value: string) {
-  return toAscii(value)
-    .replace(/\\/g, '\\\\')
-    .replace(/\(/g, '\\(')
-    .replace(/\)/g, '\\)')
+function escapePdf(value: string) {
+  return toAscii(value).replace(/\\/g, '\\\\').replace(/\(/g, '\\(').replace(/\)/g, '\\)')
 }
 
-function buildPageContent(lines: string[]) {
-  const parts: string[] = ['BT', '/F1 9 Tf', '40 770 Td', '11 TL']
-  lines.forEach((line, idx) => {
-    if (idx === 0) {
-      parts.push(`(${escapePdfText(line)}) Tj`)
-    } else {
-      parts.push('T*')
-      parts.push(`(${escapePdfText(line)}) Tj`)
-    }
+function pageStream(lines: string[]) {
+  const cmds = ['BT', '/F1 10 Tf', '40 750 Td', '12 TL']
+  lines.forEach((line, i) => {
+    if (i > 0) cmds.push('T*')
+    cmds.push(`(${escapePdf(line)}) Tj`)
   })
-  parts.push('ET')
-  return parts.join('\n')
-}
-
-function byteLength(s: string) {
-  return new TextEncoder().encode(s).length
+  cmds.push('ET')
+  return cmds.join('\n')
 }
 
 export function buildStatementPdf(input: {
@@ -45,8 +30,16 @@ export function buildStatementPdf(input: {
   accounts: Array<{ name: string; type: string; accountNumber: string; balanceLabel: string }>
   transactions: Array<{ date: string; description: string; amountLabel: string }>
   generatedAt: string
+  totalInPeriod: number
 }): Uint8Array {
-  const header: string[] = [
+  // Cap lines so mobile download stays reliable
+  const txLines = input.transactions.slice(0, 120).map((t) => {
+    const desc =
+      t.description.length > 55 ? t.description.slice(0, 52) + '...' : t.description
+    return `${t.date.padEnd(12)} ${t.amountLabel.padStart(12)}  ${desc}`
+  })
+
+  const header = [
     'Apex Bank - 12-Month Account Statement',
     `Bank address: ${input.bankAddress}`,
     `Generated: ${input.generatedAt}`,
@@ -56,112 +49,92 @@ export function buildStatementPdf(input: {
     `Routing number: ${input.routingNumber}`,
     '',
     'Accounts (current balances)',
+    ...input.accounts.map(
+      (a) =>
+        `- ${a.name} (${a.type}) Acct ${a.accountNumber} Balance ${a.balanceLabel}`
+    ),
+    '',
+    `Ledger activity in period: ${input.totalInPeriod} transactions`,
+    `Showing most recent ${Math.min(120, input.totalInPeriod)} below`,
+    'Date         Amount        Description',
   ]
 
-  for (const a of input.accounts) {
-    header.push(
-      `- ${a.name} (${a.type})  Acct ${a.accountNumber}  Balance ${a.balanceLabel}`
-    )
-  }
-
-  header.push('')
-  header.push(
-    `Activity matching your ledger (${input.transactions.length} transactions in period)`
-  )
-  header.push('Date          Amount         Description')
-
-  const bodyLines = input.transactions.map((t) => {
-    const desc =
-      t.description.length > 68 ? t.description.slice(0, 65) + '...' : t.description
-    return `${t.date.padEnd(12)} ${t.amountLabel.padStart(12)}  ${desc}`
-  })
-
-  const allLines = [
-    ...header,
-    ...bodyLines,
+  const footer = [
     '',
-    'Apex Bank - Member FDIC - Statement reflects account history on file',
+    'Apex Bank - Member FDIC - Statement matches account history on file',
     input.bankAddress,
   ]
 
-  const LINES_PER_PAGE = 60
+  const all = [...header, ...txLines, ...footer]
+  const PER = 55
   const pages: string[][] = []
-  for (let i = 0; i < allLines.length; i += LINES_PER_PAGE) {
-    pages.push(allLines.slice(i, i + LINES_PER_PAGE))
-  }
-  if (pages.length === 0) pages.push(['Apex Bank - empty statement'])
+  for (let i = 0; i < all.length; i += PER) pages.push(all.slice(i, i + PER))
+  if (!pages.length) pages.push(['Apex Bank statement'])
 
   const n = pages.length
-  const pageObjIds = Array.from({ length: n }, (_, i) => 3 + i)
-  const contentObjIds = Array.from({ length: n }, (_, i) => 3 + n + i)
-  const fontObjId = 3 + 2 * n
+  const streams = pages.map(pageStream)
 
-  const objects: string[] = []
-  objects.push('1 0 obj
-<< /Type /Catalog /Pages 2 0 R >>
-endobj
-')
-  objects.push(
-    `2 0 obj
-<< /Type /Pages /Kids [${pageObjIds.map((id) => `${id} 0 R`).join(' ')}] /Count ${n} >>
-endobj
-`
-  )
-
-  for (let i = 0; i < n; i++) {
-    objects.push(
-      `${pageObjIds[i]} 0 obj
-<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${contentObjIds[i]} 0 R /Resources << /Font << /F1 ${fontObjId} 0 R >> >> >>
-endobj
-`
-    )
-  }
-
-  for (let i = 0; i < n; i++) {
-    const stream = buildPageContent(pages[i])
-    const len = byteLength(stream)
-    objects.push(
-      `${contentObjIds[i]} 0 obj
-<< /Length ${len} >>
-stream
-${stream}
-endstream
-endobj
-`
-    )
-  }
-
-  objects.push(
-    `${fontObjId} 0 obj
-<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
-endobj
-`
-  )
-
-  let pdf = '%PDF-1.4
-'
+  // Build PDF objects with correct byte offsets
+  const encoder = new TextEncoder()
+  const chunks: Uint8Array[] = []
   const offsets: number[] = [0]
-  for (const obj of objects) {
-    offsets.push(byteLength(pdf))
-    pdf += obj
-  }
-  const xrefStart = byteLength(pdf)
-  pdf += `xref
-0 ${objects.length + 1}
-`
-  pdf += '0000000000 65535 f 
-'
-  for (let i = 1; i < offsets.length; i++) {
-    pdf += `${String(offsets[i]).padStart(10, '0')} 00000 n 
-`
-  }
-  pdf += `trailer
-<< /Size ${objects.length + 1} /Root 1 0 R >>
-`
-  pdf += `startxref
-${xrefStart}
-%%EOF
-`
+  let size = 0
 
-  return new TextEncoder().encode(pdf)
+  function push(str: string) {
+    const bytes = encoder.encode(str)
+    chunks.push(bytes)
+    size += bytes.length
+  }
+
+  push('%PDF-1.4\n')
+
+  // 1 Catalog
+  offsets.push(size)
+  push('1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n')
+
+  // 2 Pages
+  const kids = Array.from({ length: n }, (_, i) => `${3 + i} 0 R`).join(' ')
+  offsets.push(size)
+  push(`2 0 obj\n<< /Type /Pages /Kids [${kids}] /Count ${n} >>\nendobj\n`)
+
+  // Page objects 3 .. 3+n-1
+  for (let i = 0; i < n; i++) {
+    const contentId = 3 + n + i
+    const fontId = 3 + 2 * n
+    offsets.push(size)
+    push(
+      `${3 + i} 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents ${contentId} 0 R /Resources << /Font << /F1 ${fontId} 0 R >> >> >>\nendobj\n`
+    )
+  }
+
+  // Content streams
+  for (let i = 0; i < n; i++) {
+    const stream = streams[i]
+    const len = encoder.encode(stream).length
+    offsets.push(size)
+    push(`${3 + n + i} 0 obj\n<< /Length ${len} >>\nstream\n${stream}\nendstream\nendobj\n`)
+  }
+
+  // Font
+  const fontId = 3 + 2 * n
+  offsets.push(size)
+  push(`${fontId} 0 obj\n<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>\nendobj\n`)
+
+  const xrefStart = size
+  const objCount = fontId // highest object number
+  push(`xref\n0 ${objCount + 1}\n`)
+  push('0000000000 65535 f \n')
+  for (let i = 1; i <= objCount; i++) {
+    push(`${String(offsets[i] ?? 0).padStart(10, '0')} 00000 n \n`)
+  }
+  push(`trailer\n<< /Size ${objCount + 1} /Root 1 0 R >>\n`)
+  push(`startxref\n${xrefStart}\n%%EOF\n`)
+
+  const out = new Uint8Array(size)
+  let offset = 0
+  for (const c of chunks) {
+    out.set(c, offset)
+    offset += c.length
+  }
+  return out
 }

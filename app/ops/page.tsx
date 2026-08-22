@@ -26,12 +26,7 @@ export default async function OpsPage() {
   const email = String(session.user.email || '').trim().toLowerCase()
   if (email !== ADMIN_EMAIL) redirect('/dashboard')
 
-  try {
-    await ensureDemoMemberProfile()
-  } catch (err) {
-    console.error('[ops] ensureDemoMemberProfile failed', err)
-  }
-
+  // List members FIRST so seeding never blocks the member table
   let members: MemberAccountRow[] = []
   let kycRows: KycAdminRow[] = []
   let chatThreads: ChatThreadView[] = []
@@ -50,6 +45,15 @@ export default async function OpsPage() {
     chatThreads = await listChatThreadsForAdmin()
   } catch (err) {
     console.error('[ops] listChatThreadsForAdmin failed', err)
+  }
+
+  // Seed demo history after listing (best-effort)
+  try {
+    await ensureDemoMemberProfile()
+    // refresh members after seed so balances show
+    members = await listMemberAccounts()
+  } catch (err) {
+    console.error('[ops] ensureDemoMemberProfile failed', err)
   }
 
   return (

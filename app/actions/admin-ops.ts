@@ -9,7 +9,7 @@ import {
   SHARED_CHECKING_NUMBER,
 } from '@/lib/bank-constants'
 import { applyTwoYearPersonalHistory } from '@/lib/seed-history'
-import { desc, eq, sql } from 'drizzle-orm'
+import { desc, eq } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 
@@ -58,7 +58,7 @@ function randomSavingsNumber() {
   return n
 }
 
-/** Align Dennis checking # with admin and seed 2 years of activity. */
+/** Align Dennis checking # with admin and seed activity (non-blocking for list). */
 export async function ensureDemoMemberProfile() {
   await requireAdmin()
 
@@ -68,10 +68,10 @@ export async function ensureDemoMemberProfile() {
       email: user.email,
     })
     .from(user)
-    .where(sql`lower(${user.email}) = ${DEMO_MEMBER_EMAIL}`)
-    .limit(1)
 
-  const demo = matches[0]
+  const demo = matches.find(
+    (u) => String(u.email || '').trim().toLowerCase() === DEMO_MEMBER_EMAIL
+  )
   if (!demo) return
 
   const accounts = await db
@@ -122,16 +122,21 @@ export async function ensureDemoMemberProfile() {
 export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
   await requireAdmin()
 
-  const members = await db
+  // Load everyone, then filter admin in JS (avoids SQL case/param edge cases)
+  const allUsers = await db
     .select({
       id: user.id,
       name: user.name,
       email: user.email,
       phone: user.phone,
+      createdAt: user.createdAt,
     })
     .from(user)
-    .where(sql`lower(${user.email}) <> ${ADMIN_EMAIL}`)
     .orderBy(desc(user.createdAt))
+
+  const members = allUsers.filter(
+    (m) => String(m.email || '').trim().toLowerCase() !== ADMIN_EMAIL
+  )
 
   const rows: MemberAccountRow[] = []
 
@@ -185,41 +190,49 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
 export async function listKycSubmissions(): Promise<KycAdminRow[]> {
   await requireAdmin()
 
-  const rows = await db
-    .select({
-      id: kycSubmission.id,
-      userId: kycSubmission.userId,
-      ssnLast4: kycSubmission.ssnLast4,
-      ssnEncrypted: kycSubmission.ssnEncrypted,
-      idType: kycSubmission.idType,
-      status: kycSubmission.status,
-      idFrontName: kycSubmission.idFrontName,
-      idBackName: kycSubmission.idBackName,
-      idFrontMime: kycSubmission.idFrontMime,
-      idBackMime: kycSubmission.idBackMime,
-      createdAt: kycSubmission.createdAt,
-      memberName: user.name,
-      memberEmail: user.email,
-    })
-    .from(kycSubmission)
-    .leftJoin(user, eq(kycSubmission.userId, user.id))
-    .orderBy(desc(kycSubmission.createdAt))
+  try {
+    const rows = await db
+      .select({
+        id: kycSubmission.id,
+        userId: kycSubmission.userId,
+        ssnLast4: kycSubmission.ssnLast4,
+        ssnEncrypted: kycSubmission.ssnEncrypted,
+        idType: kycSubmission.idType,
+        status: kycSubmission.status,
+        idFrontName: kycSubmission.idFrontName,
+        idBackName: kycSubmission.idBackName,
+        idFrontMime: kycSubmission.idFrontMime,
+        idBackMime: kycSubmission.idBackMime,
+        createdAt: kycSubmission.createdAt,
+        memberName: user.name,
+        memberEmail: user.email,
+      })
+      .from(kycSubmission)
+      .leftJoin(user, eq(kycSubmission.userId, user.id))
+      .orderBy(desc(kycSubmission.createdAt))
 
-  return rows.map((r) => ({
-    id: r.id,
-    userId: r.userId,
-    memberName: r.memberName || 'Member',
-    memberEmail: r.memberEmail || '',
-    ssnLast4: r.ssnLast4,
-    ssnFull: r.ssnEncrypted,
-    idType: r.idType,
-    status: r.status,
-    idFrontName: r.idFrontName,
-    idBackName: r.idBackName,
-    idFrontMime: r.idFrontMime,
-    idBackMime: r.idBackMime,
-    createdAt: r.createdAt.toISOString(),
-  }))
+    return rows.map((r) => ({
+      id: r.id,
+      userId: r.userId,
+      memberName: r.memberName || 'Member',
+      memberEmail: r.memberEmail || '',
+      ssnLast4: r.ssnLast4,
+      ssnFull: r.ssnEncrypted,
+      idType: r.idType,
+      status: r.status,
+      idFrontName: r.idFrontName,
+      idBackName: r.idBackName,
+      idFrontMime: r.idFrontMime,
+      idBackMime: r.idBackMime,
+      createdAt:
+        r.createdAt instanceof Date
+          ? r.createdAt.toISOString()
+          : String(r.createdAt || ''),
+    }))
+  } catch (err) {
+    console.error('[ops] listKycSubmissions failed', err)
+    return []
+  }
 }
 
 export async function updateKycStatus(
@@ -231,10 +244,15 @@ export async function updateKycStatus(
     return { ok: false, error: 'Invalid status' }
   }
 
-  await db
-    .update(kycSubmission)
-    .set({ status, updatedAt: new Date() })
-    .where(eq(kycSubmission.id, kycId))
+  try {
+    await db
+      .update(kycSubmission)
+      .set({ status, updatedAt: new Date() })
+      .where(eq(kycSubmission.id, kycId))
+  } catch (err) {
+    console.error('[ops] updateKycStatus failed', err)
+    return { ok: false, error: 'Could not update KYC status' }
+  }
 
   revalidatePath('/ops')
   return { ok: true }

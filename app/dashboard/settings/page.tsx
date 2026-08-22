@@ -6,6 +6,8 @@ import { getProfileSettings } from '@/app/actions/settings'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { SettingsForm } from '@/components/dashboard/settings-form'
 
+export const dynamic = 'force-dynamic'
+
 export default async function SettingsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
   if (!session?.user) redirect('/sign-in')
@@ -26,12 +28,12 @@ export default async function SettingsPage() {
     console.error('[settings page] load failed', err)
   }
 
+  const name = String(session.user.name || 'Account')
+  const email = String(session.user.email || '')
+
   return (
     <div className="min-h-svh bg-background">
-      <DashboardHeader
-        name={session.user.name || 'Account'}
-        email={session.user.email || ''}
-      />
+      <DashboardHeader name={name} email={email} />
       <main className="mx-auto max-w-6xl px-4 py-8 sm:px-6">
         <div className="mb-6 flex items-center justify-between gap-3">
           <div>

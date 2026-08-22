@@ -6,9 +6,9 @@ import { bankAccount, transaction } from '@/lib/db/schema'
 import { BANK_ADDRESS, ROUTING_NUMBER } from '@/lib/bank-constants'
 import { buildStatementPdf } from '@/lib/pdf-statement'
 import { formatCurrency, formatDate } from '@/lib/format'
-import { and, asc, eq, gte } from 'drizzle-orm'
+import { and, desc, eq, gte, sql } from 'drizzle-orm'
 
-export const maxDuration = 60
+export const maxDuration = 30
 
 export async function GET() {
   try {
@@ -29,12 +29,20 @@ export async function GET() {
     since.setMonth(since.getMonth() - 12)
     since.setHours(0, 0, 0, 0)
 
-    // Chronological 12-month activity from the real ledger
+    const countRows = await db
+      .select({ count: sql<number>`count(*)::int` })
+      .from(transaction)
+      .where(and(eq(transaction.userId, userId), gte(transaction.createdAt, since)))
+
+    const totalInPeriod = Number(countRows[0]?.count ?? 0)
+
+    // Most recent activity for the PDF body (keeps file small + valid on mobile)
     const txs = await db
       .select()
       .from(transaction)
       .where(and(eq(transaction.userId, userId), gte(transaction.createdAt, since)))
-      .orderBy(asc(transaction.createdAt), asc(transaction.id))
+      .orderBy(desc(transaction.createdAt), desc(transaction.id))
+      .limit(120)
 
     const periodEnd = new Date()
     const periodLabel = `${since.toLocaleDateString('en-US')} - ${periodEnd.toLocaleDateString('en-US')}`
@@ -53,10 +61,11 @@ export async function GET() {
       })),
       transactions: txs.map((t) => ({
         date: formatDate(t.createdAt),
-        description: `${t.description}${t.counterparty ? ` - ${t.counterparty}` : ''}`,
+        description: t.description,
         amountLabel: formatCurrency(t.amountCents),
       })),
       generatedAt: new Date().toLocaleString('en-US'),
+      totalInPeriod,
     })
 
     const filename = `apex-12mo-statement-${new Date().toISOString().slice(0, 10)}.pdf`
@@ -66,6 +75,7 @@ export async function GET() {
       headers: {
         'Content-Type': 'application/pdf',
         'Content-Disposition': `attachment; filename="${filename}"`,
+        'Content-Length': String(pdf.byteLength),
         'Cache-Control': 'no-store',
       },
     })

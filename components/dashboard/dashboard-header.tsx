@@ -4,6 +4,7 @@ import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { FileText, LogOut, Settings, Shield, User } from 'lucide-react'
+import { toast } from 'sonner'
 import { authClient } from '@/lib/auth-client'
 import { ApexLogo } from '@/components/apex-logo'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -18,6 +19,7 @@ export function DashboardHeader({
 }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
+  const [downloading, setDownloading] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
   const safeName = name?.trim() || 'Account'
   const safeEmail = email?.trim() || ''
@@ -47,6 +49,32 @@ export function DashboardHeader({
     router.refresh()
   }
 
+  async function downloadStatement() {
+    setOpen(false)
+    setDownloading(true)
+    try {
+      const res = await fetch('/api/statement', { credentials: 'include' })
+      if (!res.ok) {
+        toast.error('Could not download statement')
+        return
+      }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `apex-12mo-statement-${new Date().toISOString().slice(0, 10)}.pdf`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(url)
+      toast.success('Statement downloaded')
+    } catch {
+      toast.error('Download failed. Try again.')
+    } finally {
+      setDownloading(false)
+    }
+  }
+
   return (
     <header className="sticky top-0 z-40 border-b border-border/60 bg-background/80 backdrop-blur-md">
       <div className="mx-auto flex h-16 max-w-6xl items-center justify-between px-4 sm:px-6">
@@ -64,7 +92,7 @@ export function DashboardHeader({
           >
             <Avatar className="size-7">
               <AvatarFallback className="text-xs font-semibold">
-                {initials || <User />}
+                {initials || 'U'}
               </AvatarFallback>
             </Avatar>
             <span className="hidden text-sm font-medium text-foreground sm:inline">
@@ -89,14 +117,15 @@ export function DashboardHeader({
                 <Settings className="size-4" />
                 Settings
               </Link>
-              <a
-                href="/api/statement"
-                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-                onClick={() => setOpen(false)}
+              <button
+                type="button"
+                disabled={downloading}
+                onClick={downloadStatement}
+                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent disabled:opacity-50"
               >
                 <FileText className="size-4" />
-                12-month statement (PDF)
-              </a>
+                {downloading ? 'Preparing PDF…' : '12-month statement (PDF)'}
+              </button>
               {isAdmin && (
                 <Link
                   href="/ops"
