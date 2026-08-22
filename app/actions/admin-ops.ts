@@ -4,7 +4,7 @@ import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { bankAccount, user } from '@/lib/db/schema'
 import { ADMIN_EMAIL } from '@/lib/bank-constants'
-import { desc, eq, ne } from 'drizzle-orm'
+import { desc, eq, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
 
 export type MemberAccountRow = {
@@ -31,6 +31,7 @@ async function requireAdmin() {
 export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
   await requireAdmin()
 
+  // Case-insensitive exclude for admin email; avoid relying on exact string match only.
   const members = await db
     .select({
       id: user.id,
@@ -38,37 +39,53 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
       email: user.email,
     })
     .from(user)
-    .where(ne(user.email, ADMIN_EMAIL))
+    .where(sql`lower(${user.email}) <> ${ADMIN_EMAIL}`)
     .orderBy(desc(user.createdAt))
 
   const rows: MemberAccountRow[] = []
 
   for (const member of members) {
-    const accounts = await db
-      .select({
-        id: bankAccount.id,
-        type: bankAccount.type,
-        accountNumber: bankAccount.accountNumber,
-        balanceCents: bankAccount.balanceCents,
+    try {
+      const accounts = await db
+        .select({
+          id: bankAccount.id,
+          type: bankAccount.type,
+          accountNumber: bankAccount.accountNumber,
+          balanceCents: bankAccount.balanceCents,
+        })
+        .from(bankAccount)
+        .where(eq(bankAccount.userId, member.id))
+
+      const checking = accounts.find((a) => a.type === 'checking')
+      const savings = accounts.find((a) => a.type === 'savings')
+
+      rows.push({
+        userId: member.id,
+        name: member.name || 'Member',
+        email: member.email,
+        phone: null,
+        checkingId: checking?.id ?? null,
+        checkingNumber: checking?.accountNumber ?? null,
+        checkingBalanceCents: Number(checking?.balanceCents ?? 0),
+        savingsId: savings?.id ?? null,
+        savingsNumber: savings?.accountNumber ?? null,
+        savingsBalanceCents: Number(savings?.balanceCents ?? 0),
       })
-      .from(bankAccount)
-      .where(eq(bankAccount.userId, member.id))
-
-    const checking = accounts.find((a) => a.type === 'checking')
-    const savings = accounts.find((a) => a.type === 'savings')
-
-    rows.push({
-      userId: member.id,
-      name: member.name,
-      email: member.email,
-      phone: null,
-      checkingId: checking?.id ?? null,
-      checkingNumber: checking?.accountNumber ?? null,
-      checkingBalanceCents: Number(checking?.balanceCents ?? 0),
-      savingsId: savings?.id ?? null,
-      savingsNumber: savings?.accountNumber ?? null,
-      savingsBalanceCents: Number(savings?.balanceCents ?? 0),
-    })
+    } catch (err) {
+      console.error('[ops] account lookup failed for', member.id, err)
+      rows.push({
+        userId: member.id,
+        name: member.name || 'Member',
+        email: member.email,
+        phone: null,
+        checkingId: null,
+        checkingNumber: null,
+        checkingBalanceCents: 0,
+        savingsId: null,
+        savingsNumber: null,
+        savingsBalanceCents: 0,
+      })
+    }
   }
 
   return rows
