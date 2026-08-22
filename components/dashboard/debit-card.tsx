@@ -10,6 +10,108 @@ function maskPan(accountNumber: string) {
   return `4532  ••••  ••••  ${last4}`
 }
 
+const DESIGNS = [
+  {
+    id: 'forest',
+    name: 'Forest',
+    finish: 'Matte metal',
+    text: 'text-white',
+    muted: 'text-white/60',
+    bg: 'radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(135deg, #0b3d2e 0%, #145c43 42%, #1f7a56 72%, #0f2f24 100%)',
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    finish: 'Gloss black',
+    text: 'text-white',
+    muted: 'text-white/60',
+    bg: 'radial-gradient(90% 70% at 100% 0%, rgba(90,120,255,0.25) 0%, transparent 50%), linear-gradient(160deg, #0a0a0c 0%, #1a1d24 55%, #0d1117 100%)',
+  },
+  {
+    id: 'champagne',
+    name: 'Champagne',
+    finish: 'Brushed gold',
+    text: 'text-[#2a2114]',
+    muted: 'text-[#2a2114]/60',
+    bg: 'radial-gradient(80% 60% at 10% 0%, rgba(255,255,255,0.35) 0%, transparent 50%), linear-gradient(135deg, #f3e2b8 0%, #d4b06a 45%, #c49a4a 70%, #e8d39a 100%)',
+  },
+  {
+    id: 'ivory',
+    name: 'Ivory',
+    finish: 'Ceramic white',
+    text: 'text-[#163228]',
+    muted: 'text-[#163228]/55',
+    bg: 'radial-gradient(70% 50% at 90% 10%, rgba(31,122,86,0.16) 0%, transparent 55%), linear-gradient(145deg, #f7f4ee 0%, #ebe4d6 50%, #f3efe6 100%)',
+  },
+] as const
+
+function CardFace({
+  design,
+  memberName,
+  accountNumber,
+}: {
+  design: (typeof DESIGNS)[number]
+  memberName: string
+  accountNumber: string
+}) {
+  return (
+    <div
+      className={`relative w-full overflow-hidden rounded-2xl p-5 shadow-2xl ${design.text}`}
+      style={{ aspectRatio: '1.586 / 1', background: design.bg }}
+    >
+      <div className="relative flex items-start justify-between">
+        <div className="flex items-center gap-2">
+          <div className="flex size-8 items-center justify-center rounded-lg bg-black/10 ring-1 ring-black/10">
+            <span className="text-sm font-black tracking-tighter">A</span>
+          </div>
+          <div>
+            <p className="text-[11px] font-semibold tracking-[0.18em]">APEX BANK</p>
+            <p className={`text-[10px] ${design.muted}`}>PHYSICAL DEBIT</p>
+          </div>
+        </div>
+        <Wifi className={`size-5 rotate-90 ${design.muted}`} aria-hidden />
+      </div>
+
+      <div className="relative mt-5 flex items-center gap-3">
+        <div
+          className="h-9 w-12 rounded-md"
+          style={{
+            background:
+              'linear-gradient(145deg, #e8d5a3 0%, #c9a84c 40%, #f0e0b0 60%, #b8923a 100%)',
+            boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.15)',
+          }}
+        >
+          <div className="grid h-full grid-cols-3 gap-px p-1 opacity-50">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="rounded-[1px] bg-black/20" />
+            ))}
+          </div>
+        </div>
+        <CreditCard className={`size-5 ${design.muted}`} />
+      </div>
+
+      <p className="relative mt-5 font-mono text-lg tracking-[0.16em] sm:text-xl">
+        {maskPan(accountNumber)}
+      </p>
+
+      <div className="relative mt-4 flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <p className={`text-[9px] uppercase tracking-wider ${design.muted}`}>Cardholder</p>
+          <p className="truncate text-sm font-semibold tracking-wide">{memberName}</p>
+        </div>
+        <div className="text-right">
+          <p className={`text-[9px] uppercase tracking-wider ${design.muted}`}>Valid thru</p>
+          <p className="font-mono text-sm font-semibold">12/29</p>
+        </div>
+        <div className="text-right">
+          <p className="text-[10px] font-bold italic tracking-wide">VISA</p>
+          <p className={`text-[9px] ${design.muted}`}>Debit</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export function DebitCard({
   memberName,
   accountNumber,
@@ -20,57 +122,54 @@ export function DebitCard({
   kycStatus: string | null
 }) {
   const router = useRouter()
-  const [pressed, setPressed] = useState(false)
+  const [selected, setSelected] = useState<(typeof DESIGNS)[number]['id']>('forest')
   const approved = kycStatus === 'approved'
   const pending = kycStatus === 'pending'
+  const design = DESIGNS.find((d) => d.id === selected) ?? DESIGNS[0]
+  const displayName = (memberName || 'APEX MEMBER').toUpperCase()
 
-  function handleGetCard() {
-    setPressed(true)
+  function requireKyc(action: string) {
     if (approved) {
-      toast.success('Debit card is ready', {
-        description: 'Your Apex Debit Card is linked to Everyday Checking.',
+      toast.success(`${action} requested`, {
+        description: `${design.name} physical card will ship after production.`,
       })
-      setPressed(false)
       return
     }
     if (pending) {
       toast.message('KYC under review', {
-        description: 'Finish verification is pending admin approval before your card can be issued.',
+        description: 'Admin must approve your verification before a physical card can ship.',
       })
-      router.push('/dashboard/settings')
-      return
+    } else {
+      toast.error('KYC required', {
+        description: 'Verify your identity to order a physical Apex Debit Card.',
+      })
     }
-    toast.error('KYC required', {
-      description: 'Verify your identity to get an Apex Debit Card.',
-    })
     router.push('/dashboard/settings')
   }
-
-  const displayName = (memberName || 'APEX MEMBER').toUpperCase()
 
   return (
     <section className="rounded-2xl border border-border bg-card p-5 shadow-sm">
       <div className="flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wider text-primary">
-            Debit card
+            Physical cards
           </p>
           <h2 className="text-lg font-bold tracking-tight text-foreground">
-            Apex Debit Card
+            Choose your Apex card
           </h2>
           <p className="mt-1 text-sm text-muted-foreground">
-            Instant virtual card tied to your checking account. Physical card ships after KYC.
+            Four finishes. Same checking account. Ships only after KYC approval.
           </p>
         </div>
         {approved ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-500/10 px-2.5 py-1 text-xs font-medium text-emerald-700">
             <ShieldCheck className="size-3.5" />
-            KYC verified · Card eligible
+            KYC verified
           </span>
         ) : pending ? (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-amber-500/10 px-2.5 py-1 text-xs font-medium text-amber-700">
             <Lock className="size-3.5" />
-            KYC pending review
+            KYC pending
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 text-xs font-medium text-muted-foreground">
@@ -80,108 +179,54 @@ export function DebitCard({
         )}
       </div>
 
-      {/* Card face */}
       <div className="mt-5 flex justify-center">
-        <div
-          className="relative w-full max-w-[380px] overflow-hidden rounded-2xl p-5 text-white shadow-2xl"
-          style={{
-            aspectRatio: '1.586 / 1',
-            background:
-              'radial-gradient(120% 80% at 0% 0%, rgba(255,255,255,0.18) 0%, transparent 45%), linear-gradient(135deg, #0b3d2e 0%, #145c43 42%, #1f7a56 72%, #0f2f24 100%)',
-          }}
-        >
-          {/* Soft sheen */}
-          <div
-            className="pointer-events-none absolute -right-10 -top-16 h-40 w-40 rounded-full opacity-30"
-            style={{
-              background: 'radial-gradient(circle, rgba(255,255,255,0.45) 0%, transparent 70%)',
-            }}
-          />
-          <div
-            className="pointer-events-none absolute -bottom-20 left-10 h-44 w-44 rounded-full opacity-20"
-            style={{
-              background: 'radial-gradient(circle, rgba(180,255,210,0.5) 0%, transparent 70%)',
-            }}
-          />
-
-          {/* Top row */}
-          <div className="relative flex items-start justify-between">
-            <div className="flex items-center gap-2">
-              <div className="flex size-8 items-center justify-center rounded-lg bg-white/15 ring-1 ring-white/25">
-                <span className="text-sm font-black tracking-tighter">A</span>
-              </div>
-              <div>
-                <p className="text-[11px] font-semibold tracking-[0.18em] text-white/90">
-                  APEX BANK
-                </p>
-                <p className="text-[10px] text-white/65">DEBIT</p>
-              </div>
-            </div>
-            <Wifi className="size-5 rotate-90 text-white/80" aria-hidden />
-          </div>
-
-          {/* Chip */}
-          <div className="relative mt-5 flex items-center gap-3">
-            <div
-              className="h-9 w-12 rounded-md"
-              style={{
-                background:
-                  'linear-gradient(145deg, #e8d5a3 0%, #c9a84c 40%, #f0e0b0 60%, #b8923a 100%)',
-                boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.15)',
-              }}
-            >
-              <div className="grid h-full grid-cols-3 gap-px p-1 opacity-50">
-                {Array.from({ length: 6 }).map((_, i) => (
-                  <div key={i} className="rounded-[1px] bg-black/20" />
-                ))}
-              </div>
-            </div>
-            <CreditCard className="size-5 text-white/50" />
-          </div>
-
-          {/* Number */}
-          <p className="relative mt-5 font-mono text-lg tracking-[0.18em] text-white sm:text-xl">
-            {maskPan(accountNumber)}
-          </p>
-
-          {/* Bottom */}
-          <div className="relative mt-4 flex items-end justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-[9px] uppercase tracking-wider text-white/55">Cardholder</p>
-              <p className="truncate text-sm font-semibold tracking-wide text-white">
-                {displayName}
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-[9px] uppercase tracking-wider text-white/55">Valid thru</p>
-              <p className="font-mono text-sm font-semibold text-white">12/29</p>
-            </div>
-            <div className="flex flex-col items-end">
-              <p className="text-[10px] font-bold italic tracking-wide text-white/90">VISA</p>
-              <p className="text-[9px] text-white/55">Debit</p>
-            </div>
-          </div>
+        <div className="w-full max-w-[380px]">
+          <CardFace design={design} memberName={displayName} accountNumber={accountNumber} />
         </div>
       </div>
 
-      <div className="mt-5 flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {DESIGNS.map((option) => (
+          <button
+            key={option.id}
+            type="button"
+            onClick={() => setSelected(option.id)}
+            className={`rounded-xl border p-2 text-left transition ${
+              selected === option.id
+                ? 'border-primary ring-2 ring-primary/20'
+                : 'border-border hover:border-foreground/20'
+            }`}
+          >
+            <div
+              className="h-14 w-full rounded-lg"
+              style={{ background: option.bg }}
+            />
+            <p className="mt-2 text-sm font-semibold text-foreground">{option.name}</p>
+            <p className="text-[11px] text-muted-foreground">{option.finish}</p>
+          </button>
+        ))}
+      </div>
+
+      <div className="mt-5 flex flex-col gap-3 sm:flex-row">
         <button
           type="button"
-          disabled={pressed}
-          onClick={handleGetCard}
-          className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground shadow-sm transition hover:bg-primary/90 disabled:opacity-60"
+          onClick={() => requireKyc('Get Debit Card')}
+          className="inline-flex h-11 flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 text-sm font-semibold text-primary-foreground hover:bg-primary/90"
         >
           <CreditCard className="size-4" />
-          {approved ? 'Card activated' : 'Get Debit Card'}
+          Get Debit Card
         </button>
-        {!approved && (
-          <p className="text-center text-xs text-muted-foreground sm:max-w-[220px] sm:text-left">
-            {pending
-              ? 'Your KYC is under review. You will be able to issue the card after approval.'
-              : 'You must complete KYC verification before a debit card can be issued.'}
-          </p>
-        )}
+        <button
+          type="button"
+          onClick={() => requireKyc(`Order ${design.name}`)}
+          className="inline-flex h-11 flex-1 items-center justify-center rounded-xl border border-border px-4 text-sm font-semibold text-foreground hover:bg-muted"
+        >
+          Order {design.name} physical card
+        </button>
       </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Selecting a design is free. Issuing a physical card requires completed KYC on this website.
+      </p>
     </section>
   )
 }
