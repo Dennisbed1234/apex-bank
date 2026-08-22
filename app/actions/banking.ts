@@ -93,25 +93,91 @@ function buildAdminSixMonthHistory() {
   return rows
 }
 
-/**
- * Ensures the signed-in user has starter accounts + sample transactions.
- * Idempotent: does nothing if the user already has accounts.
- * Checking account number is shared for all members; savings is random.
- * Admin (personalofficedesk@gmail.com) gets ~6 months of history.
- */
+async function applyAdminHistory(userId: string, checkingId: number) {
+  const existingTx = await db
+    .select({ id: transaction.id })
+    .from(transaction)
+    .where(and(eq(transaction.userId, userId), eq(transaction.accountId, checkingId)))
+
+  // Already backfilled
+  if (existingTx.length >= 40) return
+
+  const history = buildAdminSixMonthHistory()
+  let checkingBalance = 0
+
+  for (const t of history) {
+    checkingBalance += t.amountCents
+    await db.insert(transaction).values({
+      userId,
+      accountId: checkingId,
+      amountCents: t.amountCents,
+      type: t.amountCents >= 0 ? 'credit' : 'debit',
+      description: t.description,
+      category: t.category,
+      counterparty: t.counterparty,
+      createdAt: t.createdAt,
+    })
+  }
+
+  if (checkingBalance < 50_000) {
+    const topUp = 250_000 - checkingBalance
+    checkingBalance += topUp
+    await db.insert(transaction).values({
+      userId,
+      accountId: checkingId,
+      amountCents: topUp,
+      type: 'credit',
+      description: 'Opening operating balance',
+      category: 'Income',
+      counterparty: 'Apex Bank',
+      createdAt: dateDaysAgo(175),
+    })
+  }
+
+  await db
+    .update(bankAccount)
+    .set({ balanceCents: checkingBalance })
+    .where(and(eq(bankAccount.id, checkingId), eq(bankAccount.userId, userId)))
+}
+
 export async function ensureSeeded() {
   const user = await getSessionUser()
   const userId = user.id
   const isAdmin =
     String(user.email || '').trim().toLowerCase() === ADMIN_EMAIL
 
-  const existing = await db
-    .select({ id: bankAccount.id })
+  const accounts = await db
+    .select()
     .from(bankAccount)
     .where(eq(bankAccount.userId, userId))
-    .limit(1)
+    .orderBy(bankAccount.id)
 
-  if (existing.length > 0) return
+  if (accounts.length > 0) {
+    const checking =
+      accounts.find((a) => a.type === 'checking') ?? accounts[0]
+    const savings = accounts.find((a) => a.type === 'savings')
+
+    await db
+      .update(bankAccount)
+      .set({
+        accountNumber: SHARED_CHECKING_NUMBER,
+        name: isAdmin ? 'Business Checking' : checking.name,
+      })
+      .where(and(eq(bankAccount.id, checking.id), eq(bankAccount.userId, userId)))
+
+    if (savings && savings.accountNumber === SHARED_CHECKING_NUMBER) {
+      await db
+        .update(bankAccount)
+        .set({ accountNumber: randomSavingsNumber() })
+        .where(and(eq(bankAccount.id, savings.id), eq(bankAccount.userId, userId)))
+    }
+
+    if (isAdmin) {
+      await applyAdminHistory(userId, checking.id)
+    }
+
+    return
+  }
 
   const [checking] = await db
     .insert(bankAccount)
@@ -140,20 +206,7 @@ export async function ensureSeeded() {
   let checkingBalance = 0
 
   if (isAdmin) {
-    const history = buildAdminSixMonthHistory()
-    for (const t of history) {
-      checkingBalance += t.amountCents
-      await db.insert(transaction).values({
-        userId,
-        accountId: checking.id,
-        amountCents: t.amountCents,
-        type: t.amountCents >= 0 ? 'credit' : 'debit',
-        description: t.description,
-        category: t.category,
-        counterparty: t.counterparty,
-        createdAt: t.createdAt,
-      })
-    }
+    await applyAdminHistory(userId, checking.id)
   } else {
     for (const t of REGULAR_SEED_TX) {
       checkingBalance += t.amountCents
@@ -168,27 +221,27 @@ export async function ensureSeeded() {
         createdAt: dateDaysAgo(t.daysAgo),
       })
     }
-  }
 
-  if (checkingBalance < 50_000) {
-    const topUp = 250_000 - checkingBalance
-    checkingBalance += topUp
-    await db.insert(transaction).values({
-      userId,
-      accountId: checking.id,
-      amountCents: topUp,
-      type: 'credit',
-      description: isAdmin ? 'Opening operating balance' : 'Welcome deposit',
-      category: 'Income',
-      counterparty: 'Apex Bank',
-      createdAt: dateDaysAgo(isAdmin ? 175 : 20),
-    })
-  }
+    if (checkingBalance < 50_000) {
+      const topUp = 250_000 - checkingBalance
+      checkingBalance += topUp
+      await db.insert(transaction).values({
+        userId,
+        accountId: checking.id,
+        amountCents: topUp,
+        type: 'credit',
+        description: 'Welcome deposit',
+        category: 'Income',
+        counterparty: 'Apex Bank',
+        createdAt: dateDaysAgo(20),
+      })
+    }
 
-  await db
-    .update(bankAccount)
-    .set({ balanceCents: checkingBalance })
-    .where(and(eq(bankAccount.id, checking.id), eq(bankAccount.userId, userId)))
+    await db
+      .update(bankAccount)
+      .set({ balanceCents: checkingBalance })
+      .where(and(eq(bankAccount.id, checking.id), eq(bankAccount.userId, userId)))
+  }
 
   await db.insert(transaction).values({
     userId,
