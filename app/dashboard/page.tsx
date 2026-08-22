@@ -11,6 +11,8 @@ import { DebitCard } from '@/components/dashboard/debit-card'
 import { SHARED_CHECKING_NUMBER } from '@/lib/bank-constants'
 import { issueVisaCard } from '@/lib/visa-card'
 
+export const dynamic = 'force-dynamic'
+export const revalidate = 0
 export const maxDuration = 60
 
 export default async function DashboardPage() {
