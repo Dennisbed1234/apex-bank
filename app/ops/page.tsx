@@ -3,7 +3,6 @@ import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { ADMIN_EMAIL } from '@/lib/bank-constants'
 import {
-  ensureDemoMemberProfile,
   listKycSubmissions,
   listMemberAccounts,
   type KycAdminRow,
@@ -17,7 +16,7 @@ import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { OpsPanel } from '@/components/admin/ops-panel'
 import { OpsChat } from '@/components/admin/ops-chat'
 
-export const maxDuration = 60
+export const dynamic = 'force-dynamic'
 
 export default async function OpsPage() {
   const session = await auth.api.getSession({ headers: await headers() })
@@ -26,7 +25,6 @@ export default async function OpsPage() {
   const email = String(session.user.email || '').trim().toLowerCase()
   if (email !== ADMIN_EMAIL) redirect('/dashboard')
 
-  // List members FIRST so seeding never blocks the member table
   let members: MemberAccountRow[] = []
   let kycRows: KycAdminRow[] = []
   let chatThreads: ChatThreadView[] = []
@@ -45,15 +43,6 @@ export default async function OpsPage() {
     chatThreads = await listChatThreadsForAdmin()
   } catch (err) {
     console.error('[ops] listChatThreadsForAdmin failed', err)
-  }
-
-  // Seed demo history after listing (best-effort)
-  try {
-    await ensureDemoMemberProfile()
-    // refresh members after seed so balances show
-    members = await listMemberAccounts()
-  } catch (err) {
-    console.error('[ops] ensureDemoMemberProfile failed', err)
   }
 
   return (

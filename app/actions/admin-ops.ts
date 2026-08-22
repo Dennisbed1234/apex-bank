@@ -1,7 +1,8 @@
 'use server'
 
 import { auth } from '@/lib/auth'
-import { db } from '@/lib/db'
+import { db, pool } from '@/lib/db'
+import { ensureUserProfileColumns } from '@/lib/db/ensure-columns'
 import { bankAccount, kycSubmission, user } from '@/lib/db/schema'
 import {
   ADMIN_EMAIL,
@@ -58,7 +59,6 @@ function randomSavingsNumber() {
   return n
 }
 
-/** Align Dennis checking # with admin and seed activity (non-blocking for list). */
 export async function ensureDemoMemberProfile() {
   await requireAdmin()
 
@@ -121,20 +121,14 @@ export async function ensureDemoMemberProfile() {
 
 export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
   await requireAdmin()
+  await ensureUserProfileColumns()
 
-  // Load everyone, then filter admin in JS (avoids SQL case/param edge cases)
-  const allUsers = await db
-    .select({
-      id: user.id,
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      createdAt: user.createdAt,
-    })
-    .from(user)
-    .orderBy(desc(user.createdAt))
+  // Core columns only so missing phone never hides members
+  const result = await pool.query<{ id: string; name: string; email: string }>(
+    `SELECT id, name, email FROM "user" ORDER BY "createdAt" DESC NULLS LAST`
+  )
 
-  const members = allUsers.filter(
+  const members = result.rows.filter(
     (m) => String(m.email || '').trim().toLowerCase() !== ADMIN_EMAIL
   )
 
@@ -159,7 +153,7 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
         userId: member.id,
         name: member.name || 'Member',
         email: member.email,
-        phone: member.phone,
+        phone: null,
         checkingId: checking?.id ?? null,
         checkingNumber: checking?.accountNumber ?? null,
         checkingBalanceCents: Number(checking?.balanceCents ?? 0),
@@ -173,7 +167,7 @@ export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
         userId: member.id,
         name: member.name || 'Member',
         email: member.email,
-        phone: member.phone,
+        phone: null,
         checkingId: null,
         checkingNumber: null,
         checkingBalanceCents: 0,
