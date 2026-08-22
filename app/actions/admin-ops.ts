@@ -3,7 +3,12 @@
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
 import { bankAccount, user } from '@/lib/db/schema'
-import { ADMIN_EMAIL } from '@/lib/bank-constants'
+import {
+  ADMIN_EMAIL,
+  DEMO_MEMBER_EMAIL,
+  SHARED_CHECKING_NUMBER,
+} from '@/lib/bank-constants'
+import { applyTwoYearPersonalHistory } from '@/lib/seed-history'
 import { desc, eq, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
 
@@ -28,10 +33,78 @@ async function requireAdmin() {
   return session.user
 }
 
+function randomSavingsNumber() {
+  let n = ''
+  do {
+    n = String(Math.floor(1_000_000_000 + Math.random() * 8_999_999_999))
+  } while (n === SHARED_CHECKING_NUMBER)
+  return n
+}
+
+/** Align Dennis checking # with admin and seed 2 years of activity. */
+export async function ensureDemoMemberProfile() {
+  await requireAdmin()
+
+  const matches = await db
+    .select({
+      id: user.id,
+      email: user.email,
+    })
+    .from(user)
+    .where(sql`lower(${user.email}) = ${DEMO_MEMBER_EMAIL}`)
+    .limit(1)
+
+  const demo = matches[0]
+  if (!demo) return
+
+  const accounts = await db
+    .select()
+    .from(bankAccount)
+    .where(eq(bankAccount.userId, demo.id))
+
+  let checking = accounts.find((a) => a.type === 'checking')
+  const savings = accounts.find((a) => a.type === 'savings')
+
+  if (!checking) {
+    const [created] = await db
+      .insert(bankAccount)
+      .values({
+        userId: demo.id,
+        name: 'Everyday Checking',
+        type: 'checking',
+        accountNumber: SHARED_CHECKING_NUMBER,
+        balanceCents: 0,
+      })
+      .returning()
+    checking = created
+  } else if (checking.accountNumber !== SHARED_CHECKING_NUMBER) {
+    await db
+      .update(bankAccount)
+      .set({ accountNumber: SHARED_CHECKING_NUMBER, name: 'Everyday Checking' })
+      .where(eq(bankAccount.id, checking.id))
+  }
+
+  if (!savings) {
+    await db.insert(bankAccount).values({
+      userId: demo.id,
+      name: 'High-Yield Savings',
+      type: 'savings',
+      accountNumber: randomSavingsNumber(),
+      balanceCents: 155000,
+    })
+  } else if (savings.accountNumber === SHARED_CHECKING_NUMBER) {
+    await db
+      .update(bankAccount)
+      .set({ accountNumber: randomSavingsNumber() })
+      .where(eq(bankAccount.id, savings.id))
+  }
+
+  await applyTwoYearPersonalHistory(demo.id, checking.id)
+}
+
 export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
   await requireAdmin()
 
-  // Case-insensitive exclude for admin email; avoid relying on exact string match only.
   const members = await db
     .select({
       id: user.id,
