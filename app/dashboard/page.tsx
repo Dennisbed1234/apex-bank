@@ -2,10 +2,13 @@ import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { ensureSeeded, getAccounts, getTransactions } from '@/app/actions/banking'
+import { getProfileSettings } from '@/app/actions/settings'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { AccountCard } from '@/components/dashboard/account-card'
 import { TransferDialog } from '@/components/dashboard/transfer-dialog'
 import { TransactionsList } from '@/components/dashboard/transactions-list'
+import { DebitCard } from '@/components/dashboard/debit-card'
+import { SHARED_CHECKING_NUMBER } from '@/lib/bank-constants'
 
 export const maxDuration = 60
 
@@ -14,13 +17,22 @@ export default async function DashboardPage() {
   if (!session?.user) redirect('/sign-in')
 
   await ensureSeeded()
-  const [accounts, transactions] = await Promise.all([
+  const [accounts, transactions, profile] = await Promise.all([
     getAccounts(),
     getTransactions(250),
+    getProfileSettings().catch(() => ({
+      name: session.user.name || 'Member',
+      email: session.user.email || '',
+      phone: '',
+      kyc: null as null,
+    })),
   ])
 
   const firstName = session.user.name?.split(' ')[0] || 'there'
   const accountNameById = new Map(accounts.map((a) => [a.id, a.name]))
+  const checking =
+    accounts.find((a) => a.type === 'checking') ?? accounts[0]
+  const accountNumber = checking?.accountNumber || SHARED_CHECKING_NUMBER
 
   const rows = transactions.map((t) => ({
     id: t.id,
@@ -56,6 +68,14 @@ export default async function DashboardPage() {
           {accounts.map((account) => (
             <AccountCard key={account.id} account={account} />
           ))}
+        </div>
+
+        <div className="mt-8">
+          <DebitCard
+            memberName={session.user.name || 'Member'}
+            accountNumber={accountNumber}
+            kycStatus={profile.kyc?.status ?? null}
+          />
         </div>
 
         <div className="mt-8">
