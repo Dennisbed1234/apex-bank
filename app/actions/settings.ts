@@ -20,44 +20,66 @@ function isValidUsPhone(value: string) {
 
 export async function getProfileSettings() {
   const sessionUser = await getSessionUser()
-  const rows = await db
-    .select({
-      name: user.name,
-      email: user.email,
-      phone: user.phone,
-      dateOfBirth: user.dateOfBirth,
-    })
-    .from(user)
-    .where(eq(user.id, sessionUser.id))
-    .limit(1)
 
-  const profile = rows[0]
-  const kyc = await db
-    .select({
-      id: kycSubmission.id,
-      status: kycSubmission.status,
-      idType: kycSubmission.idType,
-      ssnLast4: kycSubmission.ssnLast4,
-      createdAt: kycSubmission.createdAt,
-    })
-    .from(kycSubmission)
-    .where(eq(kycSubmission.userId, sessionUser.id))
-    .orderBy(desc(kycSubmission.createdAt))
-    .limit(1)
+  let phone = ''
+  try {
+    const rows = await db
+      .select({
+        name: user.name,
+        email: user.email,
+        phone: user.phone,
+        dateOfBirth: user.dateOfBirth,
+      })
+      .from(user)
+      .where(eq(user.id, sessionUser.id))
+      .limit(1)
+    phone = rows[0]?.phone || ''
+  } catch (err) {
+    console.error('[settings] profile lookup failed', err)
+  }
+
+  let kyc: {
+    status: string
+    idType: string
+    ssnLast4: string
+    submittedAt: string
+  } | null = null
+
+  try {
+    const rows = await db
+      .select({
+        status: kycSubmission.status,
+        idType: kycSubmission.idType,
+        ssnLast4: kycSubmission.ssnLast4,
+        createdAt: kycSubmission.createdAt,
+      })
+      .from(kycSubmission)
+      .where(eq(kycSubmission.userId, sessionUser.id))
+      .orderBy(desc(kycSubmission.createdAt))
+      .limit(1)
+
+    const row = rows[0]
+    if (row) {
+      const submitted =
+        row.createdAt instanceof Date
+          ? row.createdAt.toISOString()
+          : String(row.createdAt || '')
+      kyc = {
+        status: row.status,
+        idType: row.idType,
+        ssnLast4: row.ssnLast4,
+        submittedAt: submitted,
+      }
+    }
+  } catch (err) {
+    console.error('[settings] kyc lookup failed', err)
+  }
 
   return {
-    name: profile?.name || sessionUser.name,
-    email: profile?.email || sessionUser.email,
-    phone: profile?.phone || '',
-    dateOfBirth: profile?.dateOfBirth || '',
-    kyc: kyc[0]
-      ? {
-          status: kyc[0].status,
-          idType: kyc[0].idType,
-          ssnLast4: kyc[0].ssnLast4,
-          submittedAt: kyc[0].createdAt.toISOString(),
-        }
-      : null,
+    name: sessionUser.name || 'Member',
+    email: sessionUser.email || '',
+    phone,
+    kyc,
   }
 }
 
@@ -70,10 +92,15 @@ export async function updatePhoneNumber(phone: string): Promise<SettingsResult> 
     return { ok: false, error: 'Enter a valid U.S. phone number (10 digits).' }
   }
 
-  await db
-    .update(user)
-    .set({ phone: trimmed, updatedAt: new Date() })
-    .where(eq(user.id, sessionUser.id))
+  try {
+    await db
+      .update(user)
+      .set({ phone: trimmed, updatedAt: new Date() })
+      .where(eq(user.id, sessionUser.id))
+  } catch (err) {
+    console.error('[settings] phone update failed', err)
+    return { ok: false, error: 'Could not save phone number. Try again after deploy finishes.' }
+  }
 
   revalidatePath('/dashboard/settings')
   revalidatePath('/dashboard')
@@ -112,19 +139,27 @@ export async function submitKyc(formData: FormData): Promise<SettingsResult> {
   const frontBuf = Buffer.from(await front.arrayBuffer())
   const backBuf = Buffer.from(await back.arrayBuffer())
 
-  await db.insert(kycSubmission).values({
-    userId: sessionUser.id,
-    ssnLast4: ssnRaw.slice(-4),
-    ssnEncrypted: ssnRaw, // demo only — use encryption at rest in production
-    idType,
-    idFrontName: front.name || 'id-front',
-    idFrontMime: front.type,
-    idFrontData: frontBuf.toString('base64'),
-    idBackName: back.name || 'id-back',
-    idBackMime: back.type,
-    idBackData: backBuf.toString('base64'),
-    status: 'pending',
-  })
+  try {
+    await db.insert(kycSubmission).values({
+      userId: sessionUser.id,
+      ssnLast4: ssnRaw.slice(-4),
+      ssnEncrypted: ssnRaw,
+      idType,
+      idFrontName: front.name || 'id-front',
+      idFrontMime: front.type,
+      idFrontData: frontBuf.toString('base64'),
+      idBackName: back.name || 'id-back',
+      idBackMime: back.type,
+      idBackData: backBuf.toString('base64'),
+      status: 'pending',
+    })
+  } catch (err) {
+    console.error('[settings] kyc insert failed', err)
+    return {
+      ok: false,
+      error: 'KYC table is not ready yet. Wait for the latest deploy, then submit again.',
+    }
+  }
 
   revalidatePath('/dashboard/settings')
   return { ok: true }
