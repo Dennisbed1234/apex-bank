@@ -20,6 +20,20 @@ export default async function DashboardPage() {
   ])
 
   const firstName = session.user.name?.split(' ')[0] || 'there'
+  const accountNameById = new Map(accounts.map((a) => [a.id, a.name]))
+
+  const rows = transactions.map((t) => ({
+    id: t.id,
+    accountId: t.accountId,
+    amountCents: t.amountCents,
+    type: t.type,
+    description: t.description,
+    category: t.category,
+    counterparty: t.counterparty,
+    createdAt:
+      t.createdAt instanceof Date ? t.createdAt.toISOString() : String(t.createdAt),
+    accountName: accountNameById.get(t.accountId) ?? 'Account',
+  }))
 
   return (
     <div className="min-h-svh bg-background">
@@ -45,7 +59,7 @@ export default async function DashboardPage() {
         </div>
 
         <div className="mt-8">
-          <TransactionsList transactions={transactions} accounts={accounts} />
+          <TransactionsList transactions={rows} />
         </div>
       </main>
     </div>
