@@ -2,6 +2,7 @@ import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
 import { Manrope } from 'next/font/google'
 import { Toaster } from '@/components/ui/sonner'
+import { ChatSupport } from '@/components/chat-support'
 import './globals.css'
 
 const manrope = Manrope({
@@ -55,6 +56,7 @@ export default function RootLayout({
     <html lang="en" className={`${manrope.variable} bg-background`}>
       <body className="font-sans antialiased">
         {children}
+        <ChatSupport />
         <Toaster position="top-right" />
         {process.env.NODE_ENV === 'production' && <Analytics />}
       </body>
