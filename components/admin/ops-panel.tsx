@@ -2,9 +2,10 @@
 
 import { useMemo, useState, useTransition } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { ArrowLeft, Check, Send, X } from 'lucide-react'
 import { toast } from 'sonner'
-import { adminSendToUser } from '@/app/actions/banking'
+import { adminSendToUser } from '@/app/actions/send-to-member'
 import {
   updateKycStatus,
   type KycAdminRow,
@@ -23,6 +24,7 @@ export function OpsPanel({
   members: MemberAccountRow[]
   kycRows: KycAdminRow[]
 }) {
+  const router = useRouter()
   const [selectedUserId, setSelectedUserId] = useState(members[0]?.userId ?? '')
   const [amount, setAmount] = useState('')
   const [note, setNote] = useState('')
@@ -59,10 +61,11 @@ export function OpsPanel({
         return
       }
       toast.success('Money sent', {
-        description: `${formatCurrency(Math.round(amountDollars * 100))} credited to member checking.`,
+        description: `${formatCurrency(Math.round(amountDollars * 100))} posted on both ledgers.`,
       })
       setAmount('')
       setNote('')
+      router.refresh()
     })
   }
 
@@ -75,6 +78,7 @@ export function OpsPanel({
         return
       }
       toast.success(`KYC marked ${status}`)
+      router.refresh()
     })
   }
 
@@ -164,7 +168,7 @@ export function OpsPanel({
         <section className="rounded-xl border border-border bg-card p-4 shadow-sm">
           <h2 className="text-sm font-semibold text-foreground">Send money to member</h2>
           <p className="mt-1 text-xs text-muted-foreground">
-            Credits the member&apos;s checking account. Debits your Business Checking when funds are available.
+            Credits the member checking account and posts a matching debit on your Business Checking immediately.
           </p>
 
           <form onSubmit={handleSend} className="mt-4 flex flex-col gap-3">
@@ -326,11 +330,7 @@ export function OpsPanel({
                 </div>
 
                 <div className="flex flex-wrap gap-2">
-                  <Button
-                    type="button"
-                    disabled={isPending}
-                    onClick={() => setStatus('approved')}
-                  >
+                  <Button type="button" disabled={isPending} onClick={() => setStatus('approved')}>
                     <Check className="size-4" />
                     Approve
                   </Button>
