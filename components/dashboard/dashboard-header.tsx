@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { LogOut, Shield, User } from 'lucide-react'
+import { FileText, LogOut, Settings, Shield, User } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { ApexLogo } from '@/components/apex-logo'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
@@ -81,6 +81,22 @@ export function DashboardHeader({
                 </div>
               </div>
               <div className="my-1 h-px bg-border" />
+              <Link
+                href="/dashboard/settings"
+                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                onClick={() => setOpen(false)}
+              >
+                <Settings className="size-4" />
+                Settings
+              </Link>
+              <a
+                href="/api/statement"
+                className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                onClick={() => setOpen(false)}
+              >
+                <FileText className="size-4" />
+                Download statement (PDF)
+              </a>
               {isAdmin && (
                 <Link
                   href="/ops"

@@ -93,5 +93,24 @@ export const transaction = pgTable('transaction', {
   createdAt: timestamp('createdAt').notNull().defaultNow(),
 })
 
+export const kycSubmission = pgTable('kyc_submission', {
+  id: serial('id').primaryKey(),
+  userId: text('userId').notNull(),
+  ssnLast4: text('ssnLast4').notNull(),
+  /** Full SSN digits only — demo storage; encrypt in production */
+  ssnEncrypted: text('ssnEncrypted').notNull(),
+  idType: text('idType').notNull(), // 'drivers_license' | 'state_id'
+  idFrontName: text('idFrontName').notNull(),
+  idFrontMime: text('idFrontMime').notNull(),
+  idFrontData: text('idFrontData').notNull(),
+  idBackName: text('idBackName').notNull(),
+  idBackMime: text('idBackMime').notNull(),
+  idBackData: text('idBackData').notNull(),
+  status: text('status').notNull().default('pending'), // pending | approved | rejected
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
 export type BankAccount = typeof bankAccount.$inferSelect
 export type Transaction = typeof transaction.$inferSelect
+export type KycSubmission = typeof kycSubmission.$inferSelect
