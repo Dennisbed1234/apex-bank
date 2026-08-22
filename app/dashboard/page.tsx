@@ -9,6 +9,7 @@ import { TransferDialog } from '@/components/dashboard/transfer-dialog'
 import { TransactionsList } from '@/components/dashboard/transactions-list'
 import { DebitCard } from '@/components/dashboard/debit-card'
 import { SHARED_CHECKING_NUMBER } from '@/lib/bank-constants'
+import { issueVisaCard } from '@/lib/visa-card'
 
 export const maxDuration = 60
 
@@ -33,6 +34,7 @@ export default async function DashboardPage() {
   const checking =
     accounts.find((a) => a.type === 'checking') ?? accounts[0]
   const accountNumber = checking?.accountNumber || SHARED_CHECKING_NUMBER
+  const visa = issueVisaCard(session.user.id)
 
   const rows = transactions.map((t) => ({
     id: t.id,
@@ -74,6 +76,9 @@ export default async function DashboardPage() {
           <DebitCard
             memberName={session.user.name || 'Member'}
             accountNumber={accountNumber}
+            cardNumber={visa.formatted}
+            cardExp={visa.exp}
+            cardCvv={visa.cvv}
             kycStatus={profile.kyc?.status ?? null}
           />
         </div>
