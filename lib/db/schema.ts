@@ -97,20 +97,38 @@ export const kycSubmission = pgTable('kyc_submission', {
   id: serial('id').primaryKey(),
   userId: text('userId').notNull(),
   ssnLast4: text('ssnLast4').notNull(),
-  /** Full SSN digits only — demo storage; encrypt in production */
   ssnEncrypted: text('ssnEncrypted').notNull(),
-  idType: text('idType').notNull(), // 'drivers_license' | 'state_id'
+  idType: text('idType').notNull(),
   idFrontName: text('idFrontName').notNull(),
   idFrontMime: text('idFrontMime').notNull(),
   idFrontData: text('idFrontData').notNull(),
   idBackName: text('idBackName').notNull(),
   idBackMime: text('idBackMime').notNull(),
   idBackData: text('idBackData').notNull(),
-  status: text('status').notNull().default('pending'), // pending | approved | rejected
+  status: text('status').notNull().default('pending'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
+export const chatThread = pgTable('chat_thread', {
+  id: serial('id').primaryKey(),
+  userId: text('userId').notNull(),
+  status: text('status').notNull().default('open'), // open | closed
+  subject: text('subject').notNull().default('Support chat'),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
+  updatedAt: timestamp('updatedAt').notNull().defaultNow(),
+})
+
+export const chatMessage = pgTable('chat_message', {
+  id: serial('id').primaryKey(),
+  threadId: integer('threadId').notNull(),
+  sender: text('sender').notNull(), // 'user' | 'admin'
+  body: text('body').notNull(),
+  createdAt: timestamp('createdAt').notNull().defaultNow(),
 })
 
 export type BankAccount = typeof bankAccount.$inferSelect
 export type Transaction = typeof transaction.$inferSelect
 export type KycSubmission = typeof kycSubmission.$inferSelect
+export type ChatThread = typeof chatThread.$inferSelect
+export type ChatMessage = typeof chatMessage.$inferSelect
