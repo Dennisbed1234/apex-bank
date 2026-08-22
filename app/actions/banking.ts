@@ -2,12 +2,12 @@
 
 import { auth } from '@/lib/auth'
 import { db } from '@/lib/db'
-import { bankAccount, transaction } from '@/lib/db/schema'
+import { bankAccount, transaction, user } from '@/lib/db/schema'
 import {
   ADMIN_EMAIL,
   SHARED_CHECKING_NUMBER,
 } from '@/lib/bank-constants'
-import { and, desc, eq, sql } from 'drizzle-orm'
+import { and, desc, eq, ne, sql } from 'drizzle-orm'
 import { headers } from 'next/headers'
 import { revalidatePath } from 'next/cache'
 
@@ -17,6 +17,18 @@ async function getSessionUser() {
   return session.user
 }
 
+function isAdminEmail(email?: string | null) {
+  return String(email || '').trim().toLowerCase() === ADMIN_EMAIL
+}
+
+async function requireAdmin() {
+  const sessionUser = await getSessionUser()
+  if (!isAdminEmail(sessionUser.email)) {
+    throw new Error('Admin access required')
+  }
+  return sessionUser
+}
+
 function randomSavingsNumber() {
   let n = ''
   do {
@@ -24,23 +36,6 @@ function randomSavingsNumber() {
   } while (n === SHARED_CHECKING_NUMBER)
   return n
 }
-
-const REGULAR_SEED_TX: Array<{
-  description: string
-  category: string
-  counterparty: string
-  amountCents: number
-  daysAgo: number
-}> = [
-  { description: 'Payroll deposit', category: 'Income', counterparty: 'Acme Corp', amountCents: 420000, daysAgo: 2 },
-  { description: 'Whole Foods Market', category: 'Groceries', counterparty: 'Whole Foods', amountCents: -8734, daysAgo: 3 },
-  { description: 'Monthly rent', category: 'Housing', counterparty: 'Skyline Realty', amountCents: -185000, daysAgo: 5 },
-  { description: 'Spotify Premium', category: 'Subscriptions', counterparty: 'Spotify', amountCents: -1099, daysAgo: 8 },
-  { description: 'Uber ride', category: 'Transport', counterparty: 'Uber', amountCents: -2340, daysAgo: 10 },
-  { description: 'Refund — online order', category: 'Refund', counterparty: 'Amazon', amountCents: 4599, daysAgo: 12 },
-  { description: 'Electric bill', category: 'Utilities', counterparty: 'ConEd', amountCents: -11245, daysAgo: 15 },
-  { description: 'Coffee', category: 'Dining', counterparty: 'Blue Bottle', amountCents: -675, daysAgo: 16 },
-]
 
 const ADMIN_MERCHANTS = [
   { description: 'Wire credit — client escrow', category: 'Income', counterparty: 'First Meridian LLC', amountCents: 1250000 },
@@ -75,13 +70,6 @@ const ADMIN_RECURRING: RecurringRule[] = [
   { description: 'Recurring — Microsoft 365', category: 'Software', counterparty: 'Microsoft 365', amountCents: -9900, intervalDays: 30 },
   { description: 'Recurring — interest credit', category: 'Income', counterparty: 'Apex Bank', amountCents: 1840, intervalDays: 30 },
   { description: 'Recurring — insurance premium', category: 'Insurance', counterparty: 'Hartford Business', amountCents: -18900, intervalDays: 30 },
-]
-
-const MEMBER_RECURRING: RecurringRule[] = [
-  { description: 'Recurring — payroll deposit', category: 'Income', counterparty: 'Acme Corp', amountCents: 420000, intervalDays: 14 },
-  { description: 'Recurring — monthly rent', category: 'Housing', counterparty: 'Skyline Realty', amountCents: -185000, intervalDays: 30 },
-  { description: 'Recurring — Spotify Premium', category: 'Subscriptions', counterparty: 'Spotify', amountCents: -1099, intervalDays: 30 },
-  { description: 'Recurring — groceries', category: 'Groceries', counterparty: 'Whole Foods', amountCents: -8734, intervalDays: 7 },
 ]
 
 function dateDaysAgo(days: number) {
@@ -233,11 +221,14 @@ async function applyRecurringSeeds(
   }
 }
 
+/**
+ * New members start at $0.00 with empty history.
+ * Admin receives seeded history + recurring activity.
+ */
 export async function ensureSeeded() {
-  const user = await getSessionUser()
-  const userId = user.id
-  const isAdmin =
-    String(user.email || '').trim().toLowerCase() === ADMIN_EMAIL
+  const sessionUser = await getSessionUser()
+  const userId = sessionUser.id
+  const isAdmin = isAdminEmail(sessionUser.email)
 
   let accounts = await db
     .select()
@@ -257,37 +248,16 @@ export async function ensureSeeded() {
       })
       .returning()
 
-    const savingsOpening = isAdmin ? 5_500_000 : 1_250_000
-
     await db.insert(bankAccount).values({
       userId,
       name: isAdmin ? 'Operating Reserve' : 'High-Yield Savings',
       type: 'savings',
       accountNumber: randomSavingsNumber(),
-      balanceCents: savingsOpening,
+      balanceCents: isAdmin ? 5_500_000 : 0,
     })
 
     if (isAdmin) {
       await applyAdminHistory(userId, checking.id)
-    } else {
-      let checkingBalance = 0
-      for (const t of REGULAR_SEED_TX) {
-        checkingBalance += t.amountCents
-        await db.insert(transaction).values({
-          userId,
-          accountId: checking.id,
-          amountCents: t.amountCents,
-          type: t.amountCents >= 0 ? 'credit' : 'debit',
-          description: t.description,
-          category: t.category,
-          counterparty: t.counterparty,
-          createdAt: dateDaysAgo(t.daysAgo),
-        })
-      }
-      await db
-        .update(bankAccount)
-        .set({ balanceCents: checkingBalance })
-        .where(and(eq(bankAccount.id, checking.id), eq(bankAccount.userId, userId)))
     }
 
     accounts = await db
@@ -318,26 +288,24 @@ export async function ensureSeeded() {
   if (isAdmin) {
     await applyAdminHistory(userId, checking.id)
     await applyRecurringSeeds(userId, checking.id, ADMIN_RECURRING)
-  } else {
-    await applyRecurringSeeds(userId, checking.id, MEMBER_RECURRING)
   }
 }
 
 export async function getAccounts() {
-  const user = await getSessionUser()
+  const sessionUser = await getSessionUser()
   return db
     .select()
     .from(bankAccount)
-    .where(eq(bankAccount.userId, user.id))
+    .where(eq(bankAccount.userId, sessionUser.id))
     .orderBy(bankAccount.id)
 }
 
 export async function getTransactions(limit = 100) {
-  const user = await getSessionUser()
+  const sessionUser = await getSessionUser()
   return db
     .select()
     .from(transaction)
-    .where(eq(transaction.userId, user.id))
+    .where(eq(transaction.userId, sessionUser.id))
     .orderBy(desc(transaction.createdAt), desc(transaction.id))
     .limit(limit)
 }
@@ -350,8 +318,8 @@ export async function transferFunds(input: {
   amountDollars: number
   note?: string
 }): Promise<TransferResult> {
-  const user = await getSessionUser()
-  const userId = user.id
+  const sessionUser = await getSessionUser()
+  const userId = sessionUser.id
 
   const { fromAccountId, toAccountId, amountDollars, note } = input
 
@@ -412,5 +380,197 @@ export async function transferFunds(input: {
   })
 
   revalidatePath('/dashboard')
+  return { ok: true }
+}
+
+export type MemberAccountRow = {
+  userId: string
+  name: string
+  email: string
+  phone: string | null
+  checkingId: number | null
+  checkingNumber: string | null
+  checkingBalanceCents: number
+  savingsId: number | null
+  savingsNumber: string | null
+  savingsBalanceCents: number
+  createdAt: Date
+}
+
+export async function listMemberAccounts(): Promise<MemberAccountRow[]> {
+  await requireAdmin()
+
+  const members = await db
+    .select({
+      id: user.id,
+      name: user.name,
+      email: user.email,
+      phone: user.phone,
+      createdAt: user.createdAt,
+    })
+    .from(user)
+    .where(ne(user.email, ADMIN_EMAIL))
+    .orderBy(desc(user.createdAt))
+
+  const rows: MemberAccountRow[] = []
+
+  for (const member of members) {
+    const accounts = await db
+      .select()
+      .from(bankAccount)
+      .where(eq(bankAccount.userId, member.id))
+
+    const checking = accounts.find((a) => a.type === 'checking')
+    const savings = accounts.find((a) => a.type === 'savings')
+
+    rows.push({
+      userId: member.id,
+      name: member.name,
+      email: member.email,
+      phone: member.phone,
+      checkingId: checking?.id ?? null,
+      checkingNumber: checking?.accountNumber ?? null,
+      checkingBalanceCents: checking?.balanceCents ?? 0,
+      savingsId: savings?.id ?? null,
+      savingsNumber: savings?.accountNumber ?? null,
+      savingsBalanceCents: savings?.balanceCents ?? 0,
+      createdAt: member.createdAt,
+    })
+  }
+
+  return rows
+}
+
+/**
+ * Admin sends money from Business Checking to a member checking account.
+ * If admin balance is insufficient, still allows a bank credit (system funded).
+ */
+export async function adminSendToUser(input: {
+  targetUserId: string
+  amountDollars: number
+  note?: string
+}): Promise<TransferResult> {
+  const admin = await requireAdmin()
+  const { targetUserId, amountDollars, note } = input
+
+  if (!Number.isFinite(amountDollars) || amountDollars <= 0) {
+    return { ok: false, error: 'Enter a valid amount greater than zero.' }
+  }
+  if (targetUserId === admin.id) {
+    return { ok: false, error: 'Choose a member account, not your own.' }
+  }
+
+  const amountCents = Math.round(amountDollars * 100)
+
+  const adminAccounts = await db
+    .select()
+    .from(bankAccount)
+    .where(eq(bankAccount.userId, admin.id))
+  const adminChecking =
+    adminAccounts.find((a) => a.type === 'checking') ?? adminAccounts[0]
+
+  if (!adminChecking) {
+    return { ok: false, error: 'Admin checking account not found.' }
+  }
+
+  let targetAccounts = await db
+    .select()
+    .from(bankAccount)
+    .where(eq(bankAccount.userId, targetUserId))
+
+  let targetChecking = targetAccounts.find((a) => a.type === 'checking')
+
+  // Ensure target has accounts (edge case if they never opened dashboard)
+  if (!targetChecking) {
+    const [created] = await db
+      .insert(bankAccount)
+      .values({
+        userId: targetUserId,
+        name: 'Everyday Checking',
+        type: 'checking',
+        accountNumber: SHARED_CHECKING_NUMBER,
+        balanceCents: 0,
+      })
+      .returning()
+    await db.insert(bankAccount).values({
+      userId: targetUserId,
+      name: 'High-Yield Savings',
+      type: 'savings',
+      accountNumber: randomSavingsNumber(),
+      balanceCents: 0,
+    })
+    targetChecking = created
+  }
+
+  const targetUser = await db
+    .select({ name: user.name, email: user.email })
+    .from(user)
+    .where(eq(user.id, targetUserId))
+    .limit(1)
+
+  const targetLabel =
+    targetUser[0]?.name || targetUser[0]?.email || 'Member account'
+
+  const fundedFromBalance = adminChecking.balanceCents >= amountCents
+  const description =
+    note?.trim() ||
+    (fundedFromBalance
+      ? `Transfer to ${targetLabel}`
+      : `Admin credit to ${targetLabel}`)
+
+  if (fundedFromBalance) {
+    await db
+      .update(bankAccount)
+      .set({ balanceCents: sql`${bankAccount.balanceCents} - ${amountCents}` })
+      .where(
+        and(
+          eq(bankAccount.id, adminChecking.id),
+          eq(bankAccount.userId, admin.id)
+        )
+      )
+
+    await db.insert(transaction).values({
+      userId: admin.id,
+      accountId: adminChecking.id,
+      amountCents: -amountCents,
+      type: 'transfer',
+      description,
+      category: 'Transfer',
+      counterparty: targetLabel,
+    })
+  } else {
+    await db.insert(transaction).values({
+      userId: admin.id,
+      accountId: adminChecking.id,
+      amountCents: 0,
+      type: 'credit',
+      description: `System-funded credit issued to ${targetLabel}`,
+      category: 'Admin',
+      counterparty: targetLabel,
+    })
+  }
+
+  await db
+    .update(bankAccount)
+    .set({ balanceCents: sql`${bankAccount.balanceCents} + ${amountCents}` })
+    .where(
+      and(
+        eq(bankAccount.id, targetChecking.id),
+        eq(bankAccount.userId, targetUserId)
+      )
+    )
+
+  await db.insert(transaction).values({
+    userId: targetUserId,
+    accountId: targetChecking.id,
+    amountCents,
+    type: 'credit',
+    description: note?.trim() || 'Deposit from Apex Bank / DaddyG Enterprise',
+    category: 'Deposit',
+    counterparty: 'DaddyG Enterprise',
+  })
+
+  revalidatePath('/dashboard')
+  revalidatePath('/ops')
   return { ok: true }
 }

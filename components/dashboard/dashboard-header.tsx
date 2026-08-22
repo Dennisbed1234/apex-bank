@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { LogOut, User } from 'lucide-react'
+import { LogOut, Shield, User } from 'lucide-react'
 import { authClient } from '@/lib/auth-client'
 import { ApexLogo } from '@/components/apex-logo'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ADMIN_EMAIL } from '@/lib/bank-constants'
 
 export function DashboardHeader({
   name,
@@ -18,6 +19,7 @@ export function DashboardHeader({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
+  const isAdmin = email.trim().toLowerCase() === ADMIN_EMAIL
 
   const initials = name
     .split(' ')
@@ -76,6 +78,16 @@ export function DashboardHeader({
                 </div>
               </div>
               <div className="my-1 h-px bg-border" />
+              {isAdmin && (
+                <Link
+                  href="/ops"
+                  className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+                  onClick={() => setOpen(false)}
+                >
+                  <Shield className="size-4" />
+                  Operations desk
+                </Link>
+              )}
               <button
                 onClick={handleSignOut}
                 className="flex w-full items-center gap-1.5 rounded-md px-2 py-1.5 text-sm text-destructive hover:bg-destructive/10"
