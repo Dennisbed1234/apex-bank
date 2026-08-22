@@ -2,6 +2,7 @@ import { Landmark, PiggyBank } from 'lucide-react'
 import { Card, CardContent, CardHeader } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency, maskAccountNumber } from '@/lib/format'
+import { ROUTING_NUMBER } from '@/lib/bank-constants'
 import type { BankAccount } from '@/lib/db/schema'
 
 export function AccountCard({ account }: { account: BankAccount }) {
@@ -29,7 +30,7 @@ export function AccountCard({ account }: { account: BankAccount }) {
               {account.name}
             </p>
             <p className="text-xs text-muted-foreground">
-              {maskAccountNumber(account.accountNumber)}
+              Acct {maskAccountNumber(account.accountNumber)}
             </p>
           </div>
         </div>
@@ -42,6 +43,18 @@ export function AccountCard({ account }: { account: BankAccount }) {
         <p className="mt-1 text-3xl font-bold tracking-tight text-foreground">
           {formatCurrency(account.balanceCents, account.currency)}
         </p>
+        <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg bg-muted/50 p-3 text-xs">
+          <div>
+            <p className="text-muted-foreground">Routing</p>
+            <p className="font-medium tabular-nums text-foreground">{ROUTING_NUMBER}</p>
+          </div>
+          <div>
+            <p className="text-muted-foreground">Account</p>
+            <p className="font-medium tabular-nums text-foreground">
+              {account.accountNumber}
+            </p>
+          </div>
+        </div>
       </CardContent>
     </Card>
   )

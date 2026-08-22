@@ -1,3 +1,5 @@
+import { ROUTING_NUMBER } from '@/lib/bank-constants'
+
 export function formatCurrency(cents: number, currency = 'USD') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
@@ -16,4 +18,8 @@ export function formatDate(date: Date | string) {
 
 export function maskAccountNumber(num: string) {
   return `•••• ${num.slice(-4)}`
+}
+
+export function formatRoutingNumber(routing = ROUTING_NUMBER) {
+  return routing
 }

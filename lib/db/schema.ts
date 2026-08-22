@@ -17,6 +17,8 @@ export const user = pgTable('user', {
   email: text('email').notNull().unique(),
   emailVerified: boolean('emailVerified').notNull().default(false),
   image: text('image'),
+  phone: text('phone'),
+  dateOfBirth: text('dateOfBirth'),
   createdAt: timestamp('createdAt').notNull().defaultNow(),
   updatedAt: timestamp('updatedAt').notNull().defaultNow(),
 })
@@ -65,7 +67,6 @@ export const verification = pgTable('verification', {
 })
 
 // --- App tables ------------------------------------------------------------
-// Scoped per user via a plain `userId` column (no FK by default).
 
 export const bankAccount = pgTable('bank_account', {
   id: serial('id').primaryKey(),
@@ -84,7 +85,7 @@ export const transaction = pgTable('transaction', {
   id: serial('id').primaryKey(),
   userId: text('userId').notNull(),
   accountId: integer('accountId').notNull(),
-  amountCents: bigint('amountCents', { mode: 'number' }).notNull(), // signed: negative = debit
+  amountCents: bigint('amountCents', { mode: 'number' }).notNull(),
   type: text('type').notNull(), // 'debit' | 'credit' | 'transfer'
   description: text('description').notNull(),
   category: text('category'),

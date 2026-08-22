@@ -13,6 +13,25 @@ export const auth = betterAuth({
   emailAndPassword: {
     enabled: true,
     autoSignIn: true,
+    sendResetPassword: async ({ user, url }) => {
+      // Wire RESEND_API_KEY / EMAIL_FROM later for real delivery.
+      // For now log so reset links are available in server logs during testing.
+      console.info('[apex-bank] password reset link for', user.email, url)
+    },
+  },
+  user: {
+    additionalFields: {
+      phone: {
+        type: 'string',
+        required: false,
+        input: true,
+      },
+      dateOfBirth: {
+        type: 'string',
+        required: false,
+        input: true,
+      },
+    },
   },
   trustedOrigins: [
     ...(process.env.NODE_ENV === 'development'
@@ -36,14 +55,12 @@ export const auth = betterAuth({
       : []),
   ],
   session: {
-    expiresIn: 60 * 60 * 24 * 7, // 7 days
-    updateAge: 60 * 60 * 24, // 1 day
+    expiresIn: 60 * 60 * 24 * 7,
+    updateAge: 60 * 60 * 24,
   },
   ...(process.env.NODE_ENV === 'development'
     ? {
         advanced: {
-          // In dev (v0 preview iframe), force cross-site cookies so the
-          // session cookie is stored by the browser.
           defaultCookieAttributes: {
             sameSite: 'none' as const,
             secure: true,

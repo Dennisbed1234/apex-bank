@@ -9,39 +9,157 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { ApexLogo } from '@/components/apex-logo'
 
-export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
+function isValidUsPhone(value: string) {
+  const digits = value.replace(/\D/g, '')
+  return digits.length === 10 || (digits.length === 11 && digits.startsWith('1'))
+}
+
+export function AuthForm({
+  mode,
+}: {
+  mode: 'sign-in' | 'sign-up' | 'forgot-password' | 'reset-password'
+}) {
   const router = useRouter()
   const [name, setName] = useState('')
+  const [dateOfBirth, setDateOfBirth] = useState('')
+  const [phone, setPhone] = useState('')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [success, setSuccess] = useState<string | null>(null)
   const [loading, setLoading] = useState(false)
 
   const isSignUp = mode === 'sign-up'
+  const isForgot = mode === 'forgot-password'
+  const isReset = mode === 'reset-password'
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setError(null)
+    setSuccess(null)
     setLoading(true)
 
-    const { error } = isSignUp
-      ? await authClient.signUp.email({ email, password, name })
-      : await authClient.signIn.email({ email, password })
+    try {
+      if (isForgot) {
+        const { error } = await authClient.forgetPassword({
+          email,
+          redirectTo: '/reset-password',
+        })
+        setLoading(false)
+        if (error) {
+          setError(error.message ?? 'Unable to start password reset.')
+          return
+        }
+        setSuccess(
+          'If an account exists for that email, a reset link has been generated. Check your email (and server logs in development).'
+        )
+        return
+      }
 
-    setLoading(false)
+      if (isReset) {
+        if (password !== confirmPassword) {
+          setLoading(false)
+          setError('Passwords do not match.')
+          return
+        }
+        if (password.length < 8) {
+          setLoading(false)
+          setError('Password must be at least 8 characters.')
+          return
+        }
+        const token =
+          typeof window !== 'undefined'
+            ? new URLSearchParams(window.location.search).get('token')
+            : null
+        if (!token) {
+          setLoading(false)
+          setError('Missing reset token. Open the link from your email again.')
+          return
+        }
+        const { error } = await authClient.resetPassword({
+          newPassword: password,
+          token,
+        })
+        setLoading(false)
+        if (error) {
+          setError(error.message ?? 'Unable to reset password.')
+          return
+        }
+        setSuccess('Password updated. You can sign in now.')
+        setTimeout(() => router.push('/sign-in'), 1200)
+        return
+      }
 
-    if (error) {
-      setError(error.message ?? 'Something went wrong. Please try again.')
-      return
+      if (isSignUp) {
+        if (password !== confirmPassword) {
+          setLoading(false)
+          setError('Passwords do not match.')
+          return
+        }
+        if (!isValidUsPhone(phone)) {
+          setLoading(false)
+          setError('Enter a valid U.S. phone number (10 digits).')
+          return
+        }
+        if (!dateOfBirth) {
+          setLoading(false)
+          setError('Date of birth is required.')
+          return
+        }
+
+        const { error } = await authClient.signUp.email({
+          email,
+          password,
+          name: name.trim(),
+          phone: phone.trim(),
+          dateOfBirth,
+        } as any)
+
+        setLoading(false)
+        if (error) {
+          setError(error.message ?? 'Something went wrong. Please try again.')
+          return
+        }
+
+        router.push('/dashboard')
+        router.refresh()
+        return
+      }
+
+      const { error } = await authClient.signIn.email({ email, password })
+      setLoading(false)
+      if (error) {
+        setError(error.message ?? 'Something went wrong. Please try again.')
+        return
+      }
+
+      router.push('/dashboard')
+      router.refresh()
+    } catch (err) {
+      setLoading(false)
+      setError(err instanceof Error ? err.message : 'Something went wrong.')
     }
-
-    router.push('/dashboard')
-    router.refresh()
   }
+
+  const title = isSignUp
+    ? 'Open your account'
+    : isForgot
+      ? 'Reset your password'
+      : isReset
+        ? 'Choose a new password'
+        : 'Welcome back'
+
+  const subtitle = isSignUp
+    ? 'Get started with fee-free banking in minutes.'
+    : isForgot
+      ? 'Enter your email and we will send a reset link.'
+      : isReset
+        ? 'Enter and confirm your new password.'
+        : 'Log in to access your accounts.'
 
   return (
     <main className="grid min-h-svh lg:grid-cols-2">
-      {/* Brand panel */}
       <div className="relative hidden flex-col justify-between bg-sidebar p-10 text-sidebar-foreground lg:flex">
         <Link href="/" className="flex items-center gap-2">
           <ApexLogo className="h-7 w-7 text-sidebar-primary" />
@@ -61,13 +179,9 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
         </p>
       </div>
 
-      {/* Form panel */}
       <div className="flex items-center justify-center px-4 py-10">
         <div className="w-full max-w-sm">
-          <Link
-            href="/"
-            className="mb-8 flex items-center gap-2 lg:hidden"
-          >
+          <Link href="/" className="mb-8 flex items-center gap-2 lg:hidden">
             <ApexLogo className="h-7 w-7 text-primary" />
             <span className="text-lg font-bold tracking-tight text-foreground">
               Apex Bank
@@ -76,82 +190,158 @@ export function AuthForm({ mode }: { mode: 'sign-in' | 'sign-up' }) {
 
           <div className="mb-6">
             <h1 className="text-2xl font-bold tracking-tight text-foreground">
-              {isSignUp ? 'Open your account' : 'Welcome back'}
+              {title}
             </h1>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {isSignUp
-                ? 'Get started with fee-free banking in minutes.'
-                : 'Log in to access your accounts.'}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{subtitle}</p>
           </div>
 
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {isSignUp && (
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="name">Full name</Label>
+                  <Input
+                    id="name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    autoComplete="name"
+                    placeholder="Jordan Lee"
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="dob">Date of birth</Label>
+                  <Input
+                    id="dob"
+                    type="date"
+                    value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    required
+                    max={new Date().toISOString().slice(0, 10)}
+                  />
+                </div>
+                <div className="flex flex-col gap-2">
+                  <Label htmlFor="phone">U.S. phone number</Label>
+                  <Input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    required
+                    autoComplete="tel"
+                    placeholder="(555) 123-4567"
+                  />
+                </div>
+              </>
+            )}
+
+            {!isReset && (
               <div className="flex flex-col gap-2">
-                <Label htmlFor="name">Full name</Label>
+                <Label htmlFor="email">Email</Label>
                 <Input
-                  id="name"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
                   required
-                  autoComplete="name"
-                  placeholder="Jordan Lee"
+                  autoComplete="email"
+                  placeholder="you@example.com"
                 />
               </div>
             )}
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                required
-                autoComplete="email"
-                placeholder="you@example.com"
-              />
-            </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                required
-                minLength={8}
-                autoComplete={isSignUp ? 'new-password' : 'current-password'}
-                placeholder={isSignUp ? 'At least 8 characters' : '••••••••'}
-              />
-            </div>
+
+            {!isForgot && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="password">
+                  {isReset ? 'New password' : 'Password'}
+                </Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete={isSignUp || isReset ? 'new-password' : 'current-password'}
+                  placeholder={isSignUp || isReset ? 'At least 8 characters' : '••••••••'}
+                />
+              </div>
+            )}
+
+            {(isSignUp || isReset) && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="confirm">Confirm password</Label>
+                <Input
+                  id="confirm"
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  required
+                  minLength={8}
+                  autoComplete="new-password"
+                  placeholder="Re-enter password"
+                />
+              </div>
+            )}
 
             {error && (
               <p className="text-sm text-destructive" role="alert">
                 {error}
               </p>
             )}
+            {success && (
+              <p className="text-sm text-emerald-600" role="status">
+                {success}
+              </p>
+            )}
 
-            <Button
-              type="submit"
-              disabled={loading}
-              className="h-11 w-full text-base"
-            >
+            <Button type="submit" disabled={loading} className="h-11 w-full text-base">
               {loading
                 ? 'Please wait…'
                 : isSignUp
                   ? 'Create account'
-                  : 'Log in'}
+                  : isForgot
+                    ? 'Send reset link'
+                    : isReset
+                      ? 'Update password'
+                      : 'Log in'}
             </Button>
           </form>
 
+          {mode === 'sign-in' && (
+            <p className="mt-4 text-center text-sm">
+              <Link
+                href="/forgot-password"
+                className="font-medium text-foreground underline-offset-4 hover:underline"
+              >
+                Forgot password?
+              </Link>
+            </p>
+          )}
+
           <p className="mt-6 text-center text-sm text-muted-foreground">
-            {isSignUp ? 'Already have an account? ' : "Don't have an account? "}
-            <Link
-              href={isSignUp ? '/sign-in' : '/sign-up'}
-              className="font-medium text-foreground underline-offset-4 hover:underline"
-            >
-              {isSignUp ? 'Log in' : 'Open one'}
-            </Link>
+            {isSignUp ? (
+              <>
+                Already have an account?{' '}
+                <Link href="/sign-in" className="font-medium text-foreground underline-offset-4 hover:underline">
+                  Log in
+                </Link>
+              </>
+            ) : isForgot || isReset ? (
+              <>
+                Remembered it?{' '}
+                <Link href="/sign-in" className="font-medium text-foreground underline-offset-4 hover:underline">
+                  Log in
+                </Link>
+              </>
+            ) : (
+              <>
+                Don&apos;t have an account?{' '}
+                <Link href="/sign-up" className="font-medium text-foreground underline-offset-4 hover:underline">
+                  Open one
+                </Link>
+              </>
+            )}
           </p>
         </div>
       </div>
