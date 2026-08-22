@@ -19,11 +19,14 @@ export function DashboardHeader({
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
-  const isAdmin = email.trim().toLowerCase() === ADMIN_EMAIL
+  const safeName = name?.trim() || 'Account'
+  const safeEmail = email?.trim() || ''
+  const isAdmin = safeEmail.toLowerCase() === ADMIN_EMAIL
 
-  const initials = name
+  const initials = safeName
     .split(' ')
     .map((part) => part[0])
+    .filter(Boolean)
     .slice(0, 2)
     .join('')
     .toUpperCase()
@@ -65,7 +68,7 @@ export function DashboardHeader({
               </AvatarFallback>
             </Avatar>
             <span className="hidden text-sm font-medium text-foreground sm:inline">
-              {name}
+              {safeName}
             </span>
           </button>
 
@@ -73,8 +76,8 @@ export function DashboardHeader({
             <div className="absolute right-0 z-50 mt-2 w-56 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10">
               <div className="px-2 py-1.5">
                 <div className="flex flex-col gap-0.5">
-                  <span className="text-sm font-medium text-foreground">{name}</span>
-                  <span className="truncate text-xs text-muted-foreground">{email}</span>
+                  <span className="text-sm font-medium text-foreground">{safeName}</span>
+                  <span className="truncate text-xs text-muted-foreground">{safeEmail}</span>
                 </div>
               </div>
               <div className="my-1 h-px bg-border" />
