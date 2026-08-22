@@ -2,7 +2,6 @@ import { redirect } from 'next/navigation'
 import { headers } from 'next/headers'
 import { auth } from '@/lib/auth'
 import { ADMIN_EMAIL } from '@/lib/bank-constants'
-import { ensureSeeded } from '@/app/actions/banking'
 import { listMemberAccounts, type MemberAccountRow } from '@/app/actions/admin-ops'
 import { DashboardHeader } from '@/components/dashboard/dashboard-header'
 import { OpsPanel } from '@/components/admin/ops-panel'
@@ -14,8 +13,6 @@ export default async function OpsPage() {
   const email = String(session.user.email || '').trim().toLowerCase()
   if (email !== ADMIN_EMAIL) redirect('/dashboard')
 
-  await ensureSeeded()
-
   let members: MemberAccountRow[] = []
   try {
     members = await listMemberAccounts()
@@ -25,7 +22,10 @@ export default async function OpsPage() {
 
   return (
     <div className="min-h-svh bg-background">
-      <DashboardHeader name={session.user.name} email={session.user.email} />
+      <DashboardHeader
+        name={session.user.name || 'Admin'}
+        email={session.user.email || ADMIN_EMAIL}
+      />
       <OpsPanel members={members} />
     </div>
   )
